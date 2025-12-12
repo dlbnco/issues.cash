@@ -7,7 +7,7 @@ import {
   createBountyFromCommand,
   getMostRecentBountyByIssueNumber,
 } from "@/lib/bounty";
-import { parseCommand } from "@/lib/command-parser";
+import { parseCommand } from "@/lib/commands";
 import {
   postIssueComment,
   parseRepoFullName,
