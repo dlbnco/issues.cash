@@ -1,36 +1,63 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+issues.cash is a bounty platform on Bitcoin Cash that allows the creation and funding of bounties associated to issues on GitHub and GitLab.
 
-## Getting Started
+A smart contract holds the bounty funds, which get released when a solution is approved via pull request.
 
-First, run the development server:
+The project is in progress, and a campaign is currently running here to fund the development: https://fundme.cash/campaign/85
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+Development will take place in this repository, which also has the GitHub installed for testing the integration.
+
+# Bounties
+
+## Create a bounty
+
+On an issue, comment:
+
+```
+/bounty <amount> --refund <address> [--expiry <days>]
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+The bot will reply with further instructions.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+### Examples
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```
+# Basic bounty with default 90-day default expiry
+/bounty 2.35 --refund bitcoincash:qp2p3p3p3p3p3p3p3p3p3p3p3p3p3p3p3p
 
-## Learn More
+# Custom 60-day expiry
+/bounty 1.5 --refund bitcoincash:qp2p3p3p3p3p3p3p3p3p3p3p3p3p3p3p3p --expiry 60
+```
 
-To learn more about Next.js, take a look at the following resources:
+### Details
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+- An issue can have only one bounty associated to it, unless the existing bounty is already refunded, or expired
+- Pending bounties can be deleted by simply deleting the bot reply with the bounty details. A new bounty with different details can be created following that
+- Once funded, a bounty can be refunded by closing the issue, as long as there are no open pull requests claiming it. If desired, a new bounty with new details can be created by re-opening the issue, and repeating the usual process
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+# Claims
 
-## Deploy on Vercel
+## Claim a bounty
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+Create a pull request with the following in the body:
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+```
+/claim <issue_number> --address <address>
+```
+
+# Example
+
+```
+/claim 42 --address bitcoincash:qp2p3p3p3p3p3p3p3p3p3p3p3p3p3p3p3p
+```
+
+# GitHub app
+
+The app can be installed in any repository here: https://github.com/apps/issues-cash
+
+## Setting up the network
+
+The app runs on `mainnet` by default. To run on `testnet3`, set the following Action variable `Settings -> Secrets and variables -> Actions -> Variables` on your GitHub repository:
+
+```
+BCH_NETWORK=testnet3
+```
