@@ -1,4 +1,4 @@
-# (wip) issues.cash
+# issues.cash
 
 issues.cash is a bounty platform on Bitcoin Cash that allows the creation and funding of bounties associated to issues on GitHub and GitLab.
 
