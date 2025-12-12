@@ -46,7 +46,7 @@ Create a pull request with the following in the body:
 /claim <issue_number> --address <address>
 ```
 
-# Example
+### Example
 
 ```
 /claim 42 --address bitcoincash:qp2p3p3p3p3p3p3p3p3p3p3p3p3p3p3p3p
