@@ -1,0 +1,75 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum BCHNetwork {
+  TESTNET3
+  MAINNET
+}
+
+model Bounty {
+  id                String       @id @default(cuid())
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+  network BCHNetwork
+  fundedAt          DateTime?
+  issueUrl          String
+  issueHash         String
+  contractAddress   String       @unique
+  maintainerAddress String
+  maintainerPKH     String
+  locktime          Int
+  oraclePubkey      String
+  amount            BigInt
+  fundedAmount      BigInt?
+  status            BountyStatus @default(PENDING_FUNDING)
+  feeAmount         BigInt?
+  issueNumber       Int
+  repoFullName      String
+  attempts          Attempt[]
+  commentId         BigInt?
+  installationId    Int?
+
+  @@index([status])
+  @@index([issueUrl])
+  @@index([contractAddress])
+  @@index([issueNumber, repoFullName])
+}
+
+model Attempt {
+  id                 String        @id @default(cuid())
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+  prNumber           Int
+  prUrl              String @unique
+  contributorLogin   String
+  contributorAddress String
+  status             AttemptStatus @default(PENDING)
+  bountyId           String
+  bounty             Bounty        @relation(fields: [bountyId], references: [id], onDelete: Cascade)
+  settlementTxId     String?
+  commentId         BigInt?
+
+  @@unique([bountyId, prNumber])
+  @@index([bountyId])
+  @@index([contributorAddress])
+}
+
+enum BountyStatus {
+  PENDING_FUNDING
+  ACTIVE
+  CLAIMED
+  EXPIRED
+  REFUNDED
+}
+
+enum AttemptStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}

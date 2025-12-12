@@ -6,10 +6,24 @@
     "dev": "next dev --webpack",
     "build": "next build --webpack",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "generate-keys": "node scripts/generate-oracle-keys.js",
+    "generate-keys:mainnet": "node scripts/generate-oracle-keys.js --mainnet",
+    "generate-keys:both": "node scripts/generate-oracle-keys.js --both"
   },
   "dependencies": {
+    "@bitauth/libauth": "^3.0.0",
+    "@electrum-cash/network": "^4.1.4",
+    "@noble/curves": "^2.0.1",
+    "@noble/hashes": "^2.0.1",
+    "@noble/secp256k1": "^3.0.0",
+    "@octokit/auth-app": "^8.1.2",
+    "@octokit/webhooks-types": "^7.6.1",
+    "@prisma/client": "6.18.0",
+    "cashc": "^0.12.0",
+    "cashscript": "^0.12.0",
     "next": "16.0.0",
+    "octokit": "^5.0.5",
     "react": "19.2.0",
     "react-dom": "19.2.0"
   },
@@ -20,6 +34,7 @@
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.0.0",
+    "prisma": "6.18.0",
     "tailwindcss": "^4",
     "typescript": "^5"
   }

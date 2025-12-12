@@ -1,0 +1,120 @@
+pragma cashscript ^0.12.0;
+
+/**
+ * DynamicBounty - Escrow contract for code bounties
+ *
+ * Participants:
+ * - Maintainer: Creates bounty, funds contract, gets refund if not completed
+ * - Contributor: Submits solution, receives payout if PR merged
+ * - Oracle: Bot that verifies GitHub events and authorizes payouts
+ *
+ * Flow:
+ * 1. Contract deployed with maintainer address and oracle pubkey
+ * 2. Maintainer sends BCH to contract address
+ * 3. Contributors work on issue
+ * 4. When PR merged: Oracle signs message with contributor address
+ * 5. Anyone triggers contract with oracle signature → pays contributor
+ * 6. If not completed: Maintainer gets refund after timeout
+ */
+
+contract DynamicBounty(
+    // Oracle's public key (bot that verifies GitHub events)
+    pubkey oraclePubkey,
+
+    // Maintainer's address hash (for refunds)
+    bytes20 maintainerPKH,
+
+    // Unique identifier for this bounty (sha256 of GitHub issue URL)
+    bytes32 issueHash,
+
+    // Unix timestamp when bounty expires (e.g., 90 days from creation)
+    int locktime
+) {
+    /**
+     * Complete bounty - Pay contributor after PR merged
+     *
+     * @param contributorPKH - Hash160 of contributor's BCH address
+     * @param amount - Exact bounty amount to pay (in satoshis)
+     * @param oracleSig - Oracle's signature on the message
+     *
+     * Oracle signs: "COMPLETE" + issueHash + contributorPKH + amount
+     *
+     * This proves:
+     * - Oracle verified the PR was merged
+     * - Oracle verified this specific contributor should be paid
+     * - Oracle committed to the exact payout amount
+     */
+    function complete(bytes20 contributorPKH, int amount, datasig oracleSig) {
+        // Construct the message that oracle signed
+        // Format: "COMPLETE" + issueHash + contributorPKH + amount (8 bytes LE)
+        bytes message = bytes('COMPLETE') + issueHash + contributorPKH + bytes8(amount);
+
+        // Verify oracle signed this exact message
+        require(checkDataSig(oracleSig, message, oraclePubkey));
+
+        // Ensure exactly one output
+        require(tx.outputs.length == 1);
+
+        // Verify output pays to contributor's address
+        bytes25 contributorLock = new LockingBytecodeP2PKH(contributorPKH);
+        require(tx.outputs[0].lockingBytecode == contributorLock);
+
+        // Verify output is exactly the signed amount
+        require(tx.outputs[0].value == amount);
+    }
+
+    /**
+     * Refund maintainer - Issue closed without merge or bounty cancelled
+     *
+     * @param amount - Exact refund amount (in satoshis)
+     * @param oracleSig - Oracle's signature on the refund message
+     *
+     * Oracle signs: "REFUND" + issueHash + amount
+     *
+     * This proves:
+     * - Issue was closed without merged PR, OR
+     * - Maintainer requested cancellation, OR
+     * - Some other condition requiring refund
+     * - Oracle committed to the exact refund amount
+     */
+    function refund(int amount, datasig oracleSig) {
+        // Construct the refund message
+        // Format: "REFUND" + issueHash + amount (8 bytes LE)
+        bytes message = bytes('REFUND') + issueHash + bytes8(amount);
+
+        // Verify oracle signed this message
+        require(checkDataSig(oracleSig, message, oraclePubkey));
+
+        // Ensure exactly one output
+        require(tx.outputs.length == 1);
+
+        // Verify output pays to maintainer's address
+        bytes25 maintainerLock = new LockingBytecodeP2PKH(maintainerPKH);
+        require(tx.outputs[0].lockingBytecode == maintainerLock);
+
+        // Verify output is exactly the signed amount
+        require(tx.outputs[0].value == amount);
+    }
+
+    /**
+     * Timeout - Automatic refund after expiry
+     *
+     * No oracle signature needed - anyone can trigger this after locktime
+     *
+     * This ensures:
+     * - If oracle goes offline, funds aren't stuck forever
+     * - Maintainer can always recover funds after timeout period
+     * - No trust required for refunds after expiry
+     */
+    function timeout() {
+        // Check that locktime has passed
+        require(tx.time >= locktime);
+
+        // Ensure exactly one output (all funds returned to maintainer)
+        require(tx.outputs.length == 1);
+
+        // Verify output pays to maintainer's address
+        bytes25 maintainerLock = new LockingBytecodeP2PKH(maintainerPKH);
+        require(tx.outputs[0].lockingBytecode == maintainerLock);
+    }
+}
