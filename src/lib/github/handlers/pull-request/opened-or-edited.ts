@@ -8,7 +8,7 @@ import {
   updateBountyComments,
 } from "@/lib/bounty";
 import { createOrUpdateAttempt } from "@/lib/attempt";
-import { parseClaimCommand } from "@/lib/command-parser";
+import { parseClaimCommand } from "@/lib/commands";
 import { parseRepoFullName, postPRComment } from "@/lib/github/api";
 import * as messages from "@/lib/messages";
 import { AttemptStatus } from "@prisma/client";
