@@ -20,14 +20,10 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Get network from environment
-    const network =
-      (process.env.BCH_NETWORK as "mainnet" | "testnet3") || "testnet3";
-
-    console.log(`🔄 Checking pending bounties on ${network}...`);
+    console.log(`🔄 Checking pending bounties...`);
 
     // Check pending bounties
-    const result = await checkPendingBounties(network);
+    const result = await checkPendingBounties();
 
     console.log(
       `✅ Checked ${result.checked} bounties, ${result.funded} newly funded`,
@@ -35,7 +31,6 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      network,
       checked: result.checked,
       funded: result.funded,
       timestamp: new Date().toISOString(),

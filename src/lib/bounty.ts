@@ -159,17 +159,18 @@ export async function updateBountyCommentId(
  * Check and update funding status for pending bounties
  * This should be run as a cron job
  */
-export async function checkPendingBounties(
-  network: Network,
-): Promise<{ checked: number; funded: number }> {
+export async function checkPendingBounties(): Promise<{
+  checked: number;
+  funded: number;
+}> {
   const config = {
     [BCHNetwork.MAINNET]: createConfig(
-      network as Network,
+      "mainnet",
       "./contracts/DynamicBounty.cash",
       `./oracle-key-mainnet.json`,
     ),
     [BCHNetwork.TESTNET3]: createConfig(
-      network as Network,
+      "testnet3",
       "./contracts/DynamicBounty.cash",
       `./oracle-key-testnet3.json`,
     ),
