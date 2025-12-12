@@ -1,3 +1,5 @@
+# (wip) issues.cash
+
 issues.cash is a bounty platform on Bitcoin Cash that allows the creation and funding of bounties associated to issues on GitHub and GitLab.
 
 A smart contract holds the bounty funds, which get released when a solution is approved via pull request.
