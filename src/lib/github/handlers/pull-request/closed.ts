@@ -2,7 +2,8 @@ import type { PullRequestClosedEvent } from "@octokit/webhooks-types";
 import { prisma } from "@/lib/prisma";
 import { AttemptStatus } from "@prisma/client";
 import type { WebhookResponse } from "../types";
-import { updateBountyComments } from "@/lib/bounty";
+import { updateBountyComments, completeBountyPayout } from "@/lib/bounty";
+import { fromPrismaToElectrumNetwork } from "@/lib/network";
 
 /**
  * Handle pull request closed event
@@ -18,7 +19,7 @@ export async function handlePullRequestClosed(
     return { success: true, message: "Ignored: PR not closed" };
   }
 
-  if (action === "closed") {
+  if (pull_request.merged === false) {
     try {
       const attempt = await prisma.attempt.update({
         where: {
@@ -54,15 +55,72 @@ export async function handlePullRequestClosed(
     }
   }
 
-  // TODO: Implement oracle signing for bounty completion
-  // 1. Check if PR closes an issue with an active bounty
-  // 2. Verify PR was actually merged
-  // 3. Sign message: "COMPLETE" + issueHash + contributorPKH
-  // 4. Update bounty status in database
-  // 5. Optionally auto-trigger contract transaction
+  if (pull_request.merged === true) {
+    try {
+      const attempt = await prisma.attempt.findUnique({
+        where: {
+          prUrl: pull_request.html_url,
+        },
+        include: {
+          bounty: true,
+        },
+      });
+
+      if (!attempt) {
+        return {
+          success: true,
+          message: "No claim found for this merged PR",
+        };
+      }
+
+      const bounty = attempt.bounty;
+
+      if (bounty.status !== "ACTIVE") {
+        return {
+          success: true,
+          message: `Bounty is not active (status: ${bounty.status})`,
+        };
+      }
+
+      const network = fromPrismaToElectrumNetwork(bounty.network);
+
+      const txResult = await completeBountyPayout(
+        bounty,
+        attempt.contributorAddress,
+        network,
+      );
+
+      await prisma.attempt.update({
+        where: { id: attempt.id },
+        data: {
+          status: AttemptStatus.APPROVED,
+          settlementTxId: txResult.txid,
+          updatedAt: new Date(),
+        },
+      });
+
+      await updateBountyComments(bounty.id);
+
+      return {
+        success: true,
+        message: `Bounty completed - paid to ${attempt.contributorAddress} (tx: ${txResult.txid})`,
+        bounty: {
+          id: bounty.id,
+          contractAddress: bounty.contractAddress,
+          amount: Number(bounty.amount),
+        },
+      };
+    } catch (error) {
+      console.error("Error completing bounty:", error);
+      return {
+        success: false,
+        error: `Failed to complete bounty: ${(error as Error).message}`,
+      };
+    }
+  }
 
   return {
     success: true,
-    message: "PR merged - oracle signing not implemented yet",
+    message: "PR merged but no bounty to process",
   };
 }

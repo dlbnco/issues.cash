@@ -11,3 +11,14 @@ export const fromElectrumToPrismaNetwork = (network: Network): BCHNetwork => {
       throw new Error("Unsupported network");
   }
 };
+
+export const fromPrismaToElectrumNetwork = (network: BCHNetwork): Network => {
+  switch (network) {
+    case BCHNetwork.MAINNET:
+      return "mainnet";
+    case BCHNetwork.TESTNET3:
+      return "testnet3";
+    default:
+      throw new Error("Unsupported network");
+  }
+};
