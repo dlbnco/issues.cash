@@ -25,9 +25,12 @@ import {
   claimRegisteredMessage,
   claimRejectedMessage,
 } from "./messages";
-import { BCHNetwork, BountyStatus } from "@prisma/client";
+import { AttemptStatus, BCHNetwork, BountyStatus } from "@prisma/client";
 import { UNLOCKING_TX_FEE_AMOUNT } from "./constants";
-import { fromElectrumToPrismaNetwork } from "./network";
+import {
+  fromElectrumToPrismaNetwork,
+  fromPrismaToElectrumNetwork,
+} from "./network";
 
 export interface CreateBountyParams {
   issueUrl: string;
@@ -481,27 +484,48 @@ export async function updateBountyComments(id: string): Promise<void> {
   }
 
   try {
-    // 1. Update the issue comment with bounty status and all attempts
-    const issueMessage = bountyFundedMessage({
-      amount: bounty.amount,
-      fundedAmount: bounty.fundedAmount,
-      contractAddress: bounty.contractAddress,
-      expiryDate: bounty.locktime,
-      issueNumber: bounty.issueNumber,
-      attempts: bounty.attempts,
-    });
+    let issueMessage: string | undefined = undefined;
 
-    const bountyNewCommentId = await createOrUpdateComment(
-      owner,
-      repo,
-      bounty.issueNumber,
-      issueMessage,
-      bounty.commentId,
-      installationId,
-    );
+    switch (bounty.status) {
+      case "ACTIVE":
+        issueMessage = bountyFundedMessage({
+          amount: bounty.amount,
+          fundedAmount: bounty.fundedAmount,
+          contractAddress: bounty.contractAddress,
+          expiryDate: bounty.locktime,
+          issueNumber: bounty.issueNumber,
+          attempts: bounty.attempts,
+        });
+      case "CLAIMED":
+        const winningAttempt = bounty.attempts.find(
+          (a) => a.status === AttemptStatus.APPROVED,
+        );
+        if (winningAttempt == null || winningAttempt.settlementTxId == null)
+          return;
+        issueMessage = bountyCompletedMessage({
+          amount: bounty.fundedAmount ?? bounty.amount,
+          contributorAddress: winningAttempt?.contributorAddress,
+          contributorLogin: winningAttempt?.contributorLogin,
+          issueNumber: bounty.issueNumber,
+          network: fromPrismaToElectrumNetwork(bounty.network),
+          prNumber: winningAttempt.prNumber,
+          txId: winningAttempt.settlementTxId,
+        });
+    }
 
-    if (!bounty.commentId && bountyNewCommentId) {
-      await updateBountyCommentId(bounty.id, bountyNewCommentId);
+    if (issueMessage) {
+      const bountyNewCommentId = await createOrUpdateComment(
+        owner,
+        repo,
+        bounty.issueNumber,
+        issueMessage,
+        bounty.commentId,
+        installationId,
+      );
+
+      if (!bounty.commentId && bountyNewCommentId) {
+        await updateBountyCommentId(bounty.id, bountyNewCommentId);
+      }
     }
 
     const network = await getRepoBchNetwork(owner, repo, installationId);
