@@ -186,7 +186,7 @@ export function bountyFundedMessage(params: BountyFundedParams): string {
 
   const attemptsList = buildAttemptsTable(attempts ?? []);
 
-  return `# Bounty funded: ${formatBCH(fundedAmount ?? amount)} BCH
+  return `# 🧩 Bounty funded: ${formatBCH(fundedAmount ?? amount)} BCH
 
 This bounty is now **active** and ready to be claimed!
 
@@ -211,7 +211,7 @@ ${attemptsList}
 
 Submit a PR that solves this issue, and add the command below to your PR description:
 \`\`\`
-/claim #${issueNumber} --address <your_address>
+/claim ${issueNumber} --address <your_address>
 \`\`\`
 
 When your PR is merged, the bounty will be automatically paid to your address.
