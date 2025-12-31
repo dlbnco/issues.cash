@@ -160,14 +160,15 @@ function isValidBCHAddress(address: string): boolean {
 
   const payload = parts[1];
 
-  // Basic length check (CashAddr payload is typically 42 chars for P2PKH)
-  // q/p prefix + 40 chars + optional checksum
-  if (payload.length < 42 || payload.length > 100) {
+  // Check if it starts with q (P2PKH) or p (P2SH)
+  // Reject z (P2PKH with tokens) and r (P2SH with tokens)
+  if (!payload.startsWith("q") && !payload.startsWith("p")) {
     return false;
   }
 
-  // Check if it starts with q (P2PKH) or p (P2SH)
-  if (!payload.startsWith("q") && !payload.startsWith("p")) {
+  // Basic length check (CashAddr payload is typically 42 chars for P2PKH)
+  // CashTokens addresses (z/r prefix) are longer, so we reject them
+  if (payload.length < 42 || payload.length > 54) {
     return false;
   }
 
@@ -177,7 +178,24 @@ function isValidBCHAddress(address: string): boolean {
     return false;
   }
 
-  return true;
+  // Additional check: try to decode and verify it's 20 bytes (P2PKH)
+  try {
+    const { decodeCashAddress } = require("@bitauth/libauth");
+    const decoded = decodeCashAddress(address);
+    if (typeof decoded === "string") {
+      return false;
+    }
+
+    // Only accept addresses with 20-byte payload (standard P2PKH)
+    // Reject CashTokens addresses which have longer payloads
+    if (decoded.payload.length !== 20) {
+      return false;
+    }
+
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 /**
