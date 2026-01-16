@@ -26,77 +26,52 @@ export function BountyList({
   }
 
   return (
-    <table className="w-full">
-      <tbody className="divide-y divide-base-200">
-        {bounties.map((bounty) => {
-          const [owner, repo] = bounty.repoFullName.split("/");
-          const displayAmount = formatBCH(bounty.fundedAmount ?? bounty.amount);
-          const formattedAmount = parseFloat(displayAmount).toString();
+    <div className="divide-y divide-base-200">
+      {bounties.map((bounty) => {
+        const [owner, repo] = bounty.repoFullName.split("/");
+        const displayAmount = formatBCH(bounty.fundedAmount ?? bounty.amount);
+        const formattedAmount = parseFloat(displayAmount).toString();
 
-          const avatarUrl = `https://github.com/${owner}.png?size=48`;
+        const avatarUrl = `https://github.com/${owner}.png?size=48`;
 
-          return (
-            <tr
-              key={bounty.id}
-              className="hover:bg-base-200 font-mono text-sm transition-colors"
-            >
-              <td className="py-3 pl-4 pr-2">
-                <Link
-                  href={`/projects/${owner}/${repo}`}
-                  className="block w-6 h-6 shrink-0"
-                >
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={avatarUrl}
-                    alt={owner}
-                    className="rounded-full w-6 h-6"
-                  />
-                </Link>
-              </td>
-              {showRepo && (
-                <td className="py-3 pr-3 whitespace-nowrap">
-                  <Link
-                    href={`/projects/${owner}/${repo}`}
-                    className="text-base-content/70 hover:text-primary"
-                  >
-                    {bounty.repoFullName}
-                  </Link>
-                </td>
-              )}
-              <td className="py-3 pr-3 whitespace-nowrap">
-                <a
-                  href={bounty.issueUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-base-content/50 hover:text-primary"
-                >
-                  #{bounty.issueNumber}
-                </a>
-              </td>
-              <td className="py-3 pr-3 max-w-0 w-full">
-                <a
-                  href={bounty.issueUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="block truncate hover:text-primary"
-                >
-                  {bounty.issueTitle ?? `Issue #${bounty.issueNumber}`}
-                </a>
-              </td>
-              <td className="py-3 pr-4 whitespace-nowrap text-right">
-                <div className="text-success font-semibold">
-                  {formattedAmount} BCH
+        return (
+          <a
+            key={bounty.id}
+            href={bounty.issueUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className={`grid ${showRepo ? "grid-cols-[auto_auto_auto_1fr_auto]" : "grid-cols-[auto_auto_1fr_auto]"} gap-3 items-center py-3 px-4 font-mono text-sm hover:bg-base-200 transition-colors`}
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={avatarUrl}
+              alt={owner}
+              className="rounded-full w-6 h-6"
+            />
+            {showRepo && (
+              <div className="text-base-content/70 whitespace-nowrap">
+                {bounty.repoFullName}
+              </div>
+            )}
+            <div className="text-base-content/50 whitespace-nowrap">
+              #{bounty.issueNumber}
+            </div>
+            <div className="truncate">
+              {bounty.issueTitle ?? `Issue #${bounty.issueNumber}`}
+            </div>
+            <div className="whitespace-nowrap text-right">
+              <div className="text-success font-semibold">
+                {formattedAmount} BCH
+              </div>
+              {showStatus && (
+                <div className="mt-1 flex justify-end">
+                  <StatusBadge status={bounty.status} />
                 </div>
-                {showStatus && (
-                  <div className="mt-1 flex justify-end">
-                    <StatusBadge status={bounty.status} />
-                  </div>
-                )}
-              </td>
-            </tr>
-          );
-        })}
-      </tbody>
-    </table>
+              )}
+            </div>
+          </a>
+        );
+      })}
+    </div>
   );
 }

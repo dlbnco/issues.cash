@@ -140,6 +140,102 @@ export async function getAttemptsByContributor(login: string) {
 }
 
 /**
+ * Get total amount of active bounties in satoshis
+ */
+export async function getActiveBountiesTotal(): Promise<bigint> {
+  const result = await prisma.bounty.aggregate({
+    where: { status: "ACTIVE" },
+    _sum: { fundedAmount: true },
+  });
+
+  return result._sum.fundedAmount ?? BigInt(0);
+}
+
+/**
+ * Get top organizations by total funded amount
+ */
+export async function getTopOrganizations(limit: number = 10) {
+  const result = await prisma.bounty.groupBy({
+    by: ["repoFullName"],
+    _sum: {
+      fundedAmount: true,
+    },
+    _count: {
+      id: true,
+    },
+    orderBy: {
+      _sum: {
+        fundedAmount: "desc",
+      },
+    },
+    take: limit,
+  });
+
+  return result.map((org) => {
+    const [owner, repo] = org.repoFullName.split("/");
+    return {
+      owner,
+      repo,
+      repoFullName: org.repoFullName,
+      totalFunded: org._sum.fundedAmount ?? BigInt(0),
+      bountiesCount: org._count.id,
+    };
+  });
+}
+
+/**
+ * Get top contributors by claimed bounties
+ */
+export async function getTopContributors(limit: number = 10) {
+  const result = await prisma.attempt.groupBy({
+    by: ["contributorLogin"],
+    where: {
+      status: "APPROVED",
+    },
+    _count: {
+      id: true,
+    },
+    orderBy: {
+      _count: {
+        id: "desc",
+      },
+    },
+    take: limit,
+  });
+
+  // Get total earned for each contributor
+  const contributorsWithEarnings = await Promise.all(
+    result.map(async (contributor) => {
+      const approvedAttempts = await prisma.attempt.findMany({
+        where: {
+          contributorLogin: contributor.contributorLogin,
+          status: "APPROVED",
+        },
+        include: {
+          bounty: {
+            select: { fundedAmount: true, amount: true },
+          },
+        },
+      });
+
+      const totalEarned = approvedAttempts.reduce(
+        (sum, attempt) =>
+          sum + (attempt.bounty.fundedAmount ?? attempt.bounty.amount),
+        BigInt(0)
+      );
+
+      return {
+        login: contributor.contributorLogin,
+        claimedCount: contributor._count.id,
+        totalEarned,
+      };
+    })
+  );
+
+  return contributorsWithEarnings;
+}
+
+/**
  * Get contributor stats
  */
 export async function getContributorStats(login: string) {
