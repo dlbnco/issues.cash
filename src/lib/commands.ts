@@ -1,3 +1,5 @@
+import { decodeCashAddress } from "@bitauth/libauth";
+
 export interface ParsedCommand {
   success: boolean;
   amount?: number; // BCH amount
@@ -146,7 +148,7 @@ export function parseCommand(command: string): ParsedCommand {
 /**
  * Basic validation for BCH address format
  */
-function isValidBCHAddress(address: string): boolean {
+export function isValidBCHAddress(address: string): boolean {
   // Check if it starts with bitcoincash: or bchtest:
   if (!address.startsWith("bitcoincash:") && !address.startsWith("bchtest:")) {
     return false;
@@ -166,9 +168,9 @@ function isValidBCHAddress(address: string): boolean {
     return false;
   }
 
-  // Basic length check (CashAddr payload is typically 42 chars for P2PKH)
+  // Basic length check (CashAddr payload is typically 41-42 chars for P2PKH)
   // CashTokens addresses (z/r prefix) are longer, so we reject them
-  if (payload.length < 42 || payload.length > 54) {
+  if (payload.length < 41 || payload.length > 54) {
     return false;
   }
 
@@ -180,7 +182,6 @@ function isValidBCHAddress(address: string): boolean {
 
   // Additional check: try to decode and verify it's 20 bytes (P2PKH)
   try {
-    const { decodeCashAddress } = require("@bitauth/libauth");
     const decoded = decodeCashAddress(address);
     if (typeof decoded === "string") {
       return false;
@@ -196,6 +197,34 @@ function isValidBCHAddress(address: string): boolean {
   } catch {
     return false;
   }
+}
+
+/**
+ * Validate that address prefix matches the expected network
+ */
+export function validateAddressForNetwork(
+  address: string,
+  network: string
+): { valid: boolean; error?: string } {
+  // Only mainnet uses bitcoincash: prefix, all other networks use bchtest:
+  const expectedPrefix = network === "mainnet" ? "bitcoincash:" : "bchtest:";
+  const wrongPrefix = network === "mainnet" ? "bchtest:" : "bitcoincash:";
+
+  if (address.startsWith(wrongPrefix)) {
+    return {
+      valid: false,
+      error: `This repository uses ${network}. Please provide an address starting with "${expectedPrefix}"`,
+    };
+  }
+
+  if (!address.startsWith(expectedPrefix)) {
+    return {
+      valid: false,
+      error: `Invalid address prefix. Expected "${expectedPrefix}" for ${network}.`,
+    };
+  }
+
+  return { valid: true };
 }
 
 /**
