@@ -2208,6 +2208,13 @@ __metadata:
   languageName: node
   linkType: hard
 
+"daisyui@npm:^5.5.14":
+  version: 5.5.14
+  resolution: "daisyui@npm:5.5.14"
+  checksum: 10c0/07fd07e9246efcadc5d6c425ea646580a31856569ee3db8d38519d92713ddf4c3b173379dca67723bc21d529c4b00b3425121a3ea3764381ade3e8b34725db60
+  languageName: node
+  linkType: hard
+
 "damerau-levenshtein@npm:^1.0.8":
   version: 1.0.8
   resolution: "damerau-levenshtein@npm:1.0.8"
@@ -3545,6 +3552,7 @@ __metadata:
     "@types/react-dom": "npm:^19"
     cashc: "npm:^0.12.0"
     cashscript: "npm:^0.12.0"
+    daisyui: "npm:^5.5.14"
     eslint: "npm:^9"
     eslint-config-next: "npm:16.0.0"
     next: "npm:16.0.10"

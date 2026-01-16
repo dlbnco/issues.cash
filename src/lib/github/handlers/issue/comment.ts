@@ -171,6 +171,7 @@ export async function handleIssueComment(
     const bounty = await createBountyFromCommand({
       issueUrl,
       issueNumber,
+      issueTitle: issue.title,
       repoFullName,
       amountBCH: command.amount!,
       refundAddress: command.refundAddress!,

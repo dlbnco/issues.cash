@@ -35,6 +35,7 @@ import {
 export interface CreateBountyParams {
   issueUrl: string;
   issueNumber: number;
+  issueTitle: string;
   repoFullName: string;
   amountBCH: number;
   refundAddress: string;
@@ -65,6 +66,7 @@ export async function createBountyFromCommand(
   const {
     issueUrl,
     issueNumber,
+    issueTitle,
     repoFullName,
     amountBCH,
     refundAddress,
@@ -108,6 +110,7 @@ export async function createBountyFromCommand(
     data: {
       issueUrl,
       issueNumber,
+      issueTitle,
       repoFullName,
       issueHash: bountyContract.issueHash,
       contractAddress: bountyContract.address,
