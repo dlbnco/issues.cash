@@ -4,7 +4,7 @@ issues.cash is a bounty platform on Bitcoin Cash that allows the creation and fu
 
 A smart contract holds the bounty funds, which get released when a solution is approved via pull request.
 
-The project is in progress, and a campaign is currently running here to fund the development: https://fundme.cash/campaign/85
+The project is in progress, and a campaign is currently running here to fund the development: https://fundme.cash/campaign/93
 
 Development will take place in this repository, which also has the GitHub installed for testing the integration.
 
