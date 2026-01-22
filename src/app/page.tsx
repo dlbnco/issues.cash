@@ -3,23 +3,26 @@ import { Footer } from "@/components/Footer";
 import { BountyList } from "@/components/BountyList";
 import { OrganizationList } from "@/components/OrganizationList";
 import { ContributorList } from "@/components/ContributorList";
+import { Stats } from "@/components/Stats";
 import {
   getAllBounties,
   getActiveBountiesTotal,
   getTopOrganizations,
   getTopContributors,
+  getGlobalStats,
 } from "@/lib/queries";
 import { formatBCH } from "@/lib/format";
 
 export const revalidate = 60;
 
 export default async function HomePage() {
-  const [bounties, totalAmount, organizations, contributors] =
+  const [bounties, totalAmount, organizations, contributors, globalStats] =
     await Promise.all([
       getAllBounties({ status: ["ACTIVE"] }),
       getActiveBountiesTotal(),
       getTopOrganizations(10),
       getTopContributors(10),
+      getGlobalStats(),
     ]);
 
   const totalBCH = formatBCH(totalAmount);
@@ -57,9 +60,17 @@ export default async function HomePage() {
             Top contributors by bounties claimed
           </p>
         </div>
-        <div className="bg-base-100 border border-base-200 rounded-lg overflow-hidden">
+        <div className="bg-base-100 border border-base-200 rounded-lg overflow-hidden mb-8">
           <ContributorList contributors={contributors} />
         </div>
+
+        <div className="mb-6">
+          <h2 className="text-xl font-bold">Stats</h2>
+          <p className="text-base-content/60 text-sm mt-1 font-mono">
+            Platform activity
+          </p>
+        </div>
+        <Stats {...globalStats} />
       </main>
       <Footer />
     </div>

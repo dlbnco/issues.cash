@@ -321,6 +321,58 @@ export async function getTopContributors(limit: number = 10) {
 }
 
 /**
+ * Get global platform stats for homepage
+ */
+export async function getGlobalStats() {
+  const [
+    activeBountiesTotal,
+    pendingBountiesTotal,
+    claimedBountiesTotal,
+    totalClaims,
+    totalContributors,
+    totalOrganizations,
+  ] = await Promise.all([
+    // BCH in active bounties
+    prisma.bounty.aggregate({
+      where: { status: "ACTIVE" },
+      _sum: { fundedAmount: true },
+    }),
+    // BCH in pending bounties
+    prisma.bounty.aggregate({
+      where: { status: "PENDING_FUNDING" },
+      _sum: { amount: true },
+    }),
+    // Total BCH paid out (claimed bounties)
+    prisma.bounty.aggregate({
+      where: { status: "CLAIMED" },
+      _sum: { fundedAmount: true },
+    }),
+    // Total successful claims
+    prisma.attempt.count({
+      where: { status: "APPROVED" },
+    }),
+    // Total unique contributors (with approved claims)
+    prisma.attempt.groupBy({
+      by: ["contributorLogin"],
+      where: { status: "APPROVED" },
+    }),
+    // Total unique organizations
+    prisma.bounty.groupBy({
+      by: ["repoOwner"],
+    }),
+  ]);
+
+  return {
+    activeBCH: activeBountiesTotal._sum.fundedAmount ?? BigInt(0),
+    pendingBCH: pendingBountiesTotal._sum.amount ?? BigInt(0),
+    paidBCH: claimedBountiesTotal._sum.fundedAmount ?? BigInt(0),
+    totalClaims,
+    totalContributors: totalContributors.length,
+    totalOrganizations: totalOrganizations.length,
+  };
+}
+
+/**
  * Get contributor stats
  */
 export async function getContributorStats(login: string) {
