@@ -24,7 +24,7 @@ function StatCard({ value, label, variant = "default" }: StatCardProps) {
 
   return (
     <div className="bg-base-100 border border-base-200 rounded-lg p-4 text-center">
-      <div className={`text-2xl font-bold font-mono ${valueColor}`}>{value}</div>
+      <div className={`text-2xl font-mono ${valueColor}`}>{value}</div>
       <div className="text-sm text-base-content/60 mt-1">{label}</div>
     </div>
   );
@@ -41,17 +41,17 @@ export function Stats({
   return (
     <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
       <StatCard
-        value={`${parseFloat(formatBCH(activeBCH))} BCH`}
+        value={formatBCH(activeBCH, { symbol: true })}
         label="Active"
         variant="success"
       />
       <StatCard
-        value={`${parseFloat(formatBCH(pendingBCH))} BCH`}
+        value={formatBCH(pendingBCH, { symbol: true })}
         label="Pending"
         variant="warning"
       />
       <StatCard
-        value={`${parseFloat(formatBCH(paidBCH))} BCH`}
+        value={formatBCH(paidBCH, { symbol: true })}
         label="Paid Out"
         variant="success"
       />

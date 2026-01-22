@@ -66,7 +66,7 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
             <span>{stats.activeBounties} active</span>
             <span>{stats.claimedBounties} claimed</span>
             <span className="text-success">
-              {parseFloat(formatBCH(stats.totalFunded))} BCH funded
+              {formatBCH(stats.totalFunded, { symbol: true })} funded
             </span>
           </div>
         </div>

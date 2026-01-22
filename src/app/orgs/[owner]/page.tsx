@@ -67,7 +67,7 @@ export default async function OrgPage({ params }: OrgPageProps) {
             <span>{stats.activeBounties} active</span>
             <span>{stats.claimedBounties} claimed</span>
             <span className="text-success">
-              {parseFloat(formatBCH(stats.totalFunded))} BCH funded
+              {formatBCH(stats.totalFunded, { symbol: true })} funded
             </span>
           </div>
         </div>
@@ -88,8 +88,8 @@ export default async function OrgPage({ params }: OrgPageProps) {
                       <span className="text-base-content/60">
                         {repo.bountiesCount} {repo.bountiesCount === 1 ? "bounty" : "bounties"}
                       </span>
-                      <span className="text-success font-semibold">
-                        {parseFloat(formatBCH(repo.totalFunded))} BCH
+                      <span className="text-success">
+                        {formatBCH(repo.totalFunded, { symbol: true })}
                       </span>
                     </div>
                   </Link>

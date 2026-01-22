@@ -27,8 +27,7 @@ export function OrganizationList({
   return (
     <div className="divide-y divide-base-200">
       {organizations.map((org) => {
-        const displayAmount = formatBCH(org.totalFunded);
-        const formattedAmount = parseFloat(displayAmount).toString();
+        const formattedAmount = formatBCH(org.totalFunded, { symbol: true });
         const avatarUrl = `https://github.com/${org.owner}.png?size=48`;
 
         return (
@@ -48,8 +47,8 @@ export function OrganizationList({
               {org.bountiesCount}{" "}
               {org.bountiesCount === 1 ? "bounty" : "bounties"}
             </div>
-            <div className="text-success font-semibold whitespace-nowrap text-right">
-              {formattedAmount} BCH
+            <div className="text-success whitespace-nowrap text-right">
+              {formattedAmount}
             </div>
           </Link>
         );

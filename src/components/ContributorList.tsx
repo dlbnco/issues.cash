@@ -27,8 +27,7 @@ export function ContributorList({
   return (
     <div className="divide-y divide-base-200">
       {contributors.map((contributor) => {
-        const displayAmount = formatBCH(contributor.totalEarned);
-        const formattedAmount = parseFloat(displayAmount).toString();
+        const formattedAmount = formatBCH(contributor.totalEarned, { symbol: true });
         const avatarUrl = `https://github.com/${contributor.login}.png?size=48`;
 
         return (
@@ -48,8 +47,8 @@ export function ContributorList({
               {contributor.claimedCount}{" "}
               {contributor.claimedCount === 1 ? "bounty" : "bounties"} claimed
             </div>
-            <div className="text-success font-semibold whitespace-nowrap text-right">
-              {formattedAmount} BCH
+            <div className="text-success whitespace-nowrap text-right">
+              {formattedAmount}
             </div>
           </Link>
         );

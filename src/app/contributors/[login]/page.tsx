@@ -69,7 +69,7 @@ export default async function ContributorPage({
             </span>
             <span>{stats.pendingAttempts} pending</span>
             <span className="text-success">
-              {parseFloat(formatBCH(stats.totalEarned))} BCH earned
+              {formatBCH(stats.totalEarned, { symbol: true })} earned
             </span>
           </div>
         </div>
@@ -98,13 +98,11 @@ export default async function ContributorPage({
                   <span className="text-base-content/50">
                     for #{attempt.bounty.issueNumber}
                   </span>
-                  <span className="text-success font-semibold">
-                    {parseFloat(
-                      formatBCH(
-                        attempt.bounty.fundedAmount ?? attempt.bounty.amount,
-                      ),
-                    )}{" "}
-                    BCH
+                  <span className="text-success">
+                    {formatBCH(
+                      attempt.bounty.fundedAmount ?? attempt.bounty.amount,
+                      { symbol: true },
+                    )}
                   </span>
                   <span className="flex items-center gap-1.5 text-base-content/60 text-xs ml-auto">
                     <span

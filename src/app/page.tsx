@@ -25,8 +25,6 @@ export default async function HomePage() {
       getGlobalStats(),
     ]);
 
-  const totalBCH = formatBCH(totalAmount);
-
   return (
     <div className="min-h-screen flex flex-col">
       <Header />
@@ -36,7 +34,7 @@ export default async function HomePage() {
           <p className="text-base-content/60 text-sm mt-1 font-mono">
             {bounties.length} active bounties •{" "}
             <span className="text-success">
-              {parseFloat(totalBCH)} BCH funded
+              {formatBCH(totalAmount, { symbol: true })} funded
             </span>
           </p>
         </div>
