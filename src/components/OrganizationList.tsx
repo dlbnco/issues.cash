@@ -3,7 +3,6 @@ import Link from "next/link";
 
 interface Organization {
   owner: string;
-  repo: string;
   totalFunded: bigint;
   bountiesCount: number;
 }
@@ -34,8 +33,8 @@ export function OrganizationList({
 
         return (
           <Link
-            key={`${org.owner}/${org.repo}`}
-            href={`/projects/${org.owner}/${org.repo}`}
+            key={`${org.owner}`}
+            href={`/orgs/${org.owner}`}
             className="grid grid-cols-[auto_1fr_auto_auto] gap-3 items-center py-3 px-4 font-mono text-sm hover:bg-base-200 transition-colors"
           >
             {/* eslint-disable-next-line @next/next/no-img-element */}

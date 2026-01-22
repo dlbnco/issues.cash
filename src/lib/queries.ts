@@ -175,9 +175,96 @@ export async function getTopOrganizations(limit: number = 10) {
 
   return result.map((org) => ({
     owner: org.repoOwner,
-    repo: org.repoName,
     totalFunded: org._sum.fundedAmount ?? BigInt(0),
     bountiesCount: org._count.id,
+  }));
+}
+
+/**
+ * Get all bounties for an organization (all repos)
+ */
+export async function getBountiesByOwner(owner: string): Promise<BountyListItem[]> {
+  const bounties = await prisma.bounty.findMany({
+    where: { repoOwner: owner },
+    orderBy: { createdAt: "desc" },
+    select: {
+      id: true,
+      repoOwner: true,
+      repoName: true,
+      issueNumber: true,
+      issueTitle: true,
+      issueUrl: true,
+      amount: true,
+      fundedAmount: true,
+      status: true,
+      createdAt: true,
+      _count: {
+        select: { attempts: true },
+      },
+    },
+  });
+
+  return bounties.map((b) => ({
+    ...b,
+    attemptsCount: b._count.attempts,
+  }));
+}
+
+/**
+ * Get stats for an organization (all repos)
+ */
+export async function getOwnerStats(owner: string) {
+  const where = { repoOwner: owner };
+
+  const [bounties, totals] = await Promise.all([
+    prisma.bounty.count({ where }),
+    prisma.bounty.aggregate({
+      where,
+      _sum: { amount: true, fundedAmount: true },
+    }),
+  ]);
+
+  const activeBounties = await prisma.bounty.count({
+    where: { ...where, status: "ACTIVE" },
+  });
+
+  const claimedBounties = await prisma.bounty.count({
+    where: { ...where, status: "CLAIMED" },
+  });
+
+  return {
+    totalBounties: bounties,
+    activeBounties,
+    claimedBounties,
+    totalAmount: totals._sum.amount ?? BigInt(0),
+    totalFunded: totals._sum.fundedAmount ?? BigInt(0),
+  };
+}
+
+/**
+ * Get repos with bounty counts for an organization
+ */
+export async function getReposByOwner(owner: string) {
+  const result = await prisma.bounty.groupBy({
+    by: ["repoName"],
+    where: { repoOwner: owner },
+    _sum: {
+      fundedAmount: true,
+    },
+    _count: {
+      id: true,
+    },
+    orderBy: {
+      _sum: {
+        fundedAmount: "desc",
+      },
+    },
+  });
+
+  return result.map((repo) => ({
+    name: repo.repoName,
+    totalFunded: repo._sum.fundedAmount ?? BigInt(0),
+    bountiesCount: repo._count.id,
   }));
 }
 

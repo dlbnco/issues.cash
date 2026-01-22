@@ -82,7 +82,7 @@ export default async function ContributorPage({
                   className="flex items-center gap-3 py-3 px-4 hover:bg-base-200 font-mono text-sm transition-colors"
                 >
                   <Link
-                    href={`/projects/${attempt.bounty.repoOwner}/${attempt.bounty.repoName}`}
+                    href={`/orgs/${attempt.bounty.repoOwner}/${attempt.bounty.repoName}`}
                     className="text-base-content/70 hover:text-primary shrink-0"
                   >
                     {attempt.bounty.repoOwner}/{attempt.bounty.repoName}
