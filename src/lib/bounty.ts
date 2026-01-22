@@ -13,7 +13,6 @@ import { bchToSats } from "@/lib/commands";
 import type { Bounty } from "@prisma/client";
 import type { Network } from "cashscript";
 import {
-  parseRepoFullName,
   postIssueComment,
   updateIssueComment,
   createOrUpdateComment,
@@ -36,7 +35,8 @@ export interface CreateBountyParams {
   issueUrl: string;
   issueNumber: number;
   issueTitle: string;
-  repoFullName: string;
+  repoOwner: string;
+  repoName: string;
   amountBCH: number;
   refundAddress: string;
   expiryDays?: number;
@@ -67,7 +67,8 @@ export async function createBountyFromCommand(
     issueUrl,
     issueNumber,
     issueTitle,
-    repoFullName,
+    repoOwner,
+    repoName,
     amountBCH,
     refundAddress,
     expiryDays = 90,
@@ -111,7 +112,8 @@ export async function createBountyFromCommand(
       issueUrl,
       issueNumber,
       issueTitle,
-      repoFullName,
+      repoOwner,
+      repoName,
       issueHash: bountyContract.issueHash,
       contractAddress: bountyContract.address,
       maintainerAddress: bountyContract.maintainerAddress,
@@ -216,7 +218,6 @@ export async function checkPendingBounties(): Promise<{
           },
         });
 
-        const { owner, repo } = parseRepoFullName(bounty.repoFullName);
         const message = bountyFundedMessage({
           amount: bounty.amount,
           fundedAmount: bounty.fundedAmount,
@@ -227,16 +228,16 @@ export async function checkPendingBounties(): Promise<{
 
         if (bounty.commentId == null) {
           await postIssueComment(
-            owner,
-            repo,
+            bounty.repoOwner,
+            bounty.repoName,
             bounty.issueNumber,
             message,
             bounty.installationId ?? undefined,
           );
         } else {
           await updateIssueComment(
-            owner,
-            repo,
+            bounty.repoOwner,
+            bounty.repoName,
             bounty.commentId,
             message,
             bounty.installationId ?? undefined,
@@ -260,12 +261,14 @@ export async function checkPendingBounties(): Promise<{
  * Get most recent bounty by issue number and repo
  */
 export async function getMostRecentBountyByIssueNumber(
-  repoFullName: string,
+  repoOwner: string,
+  repoName: string,
   issueNumber: number,
 ) {
   return await prisma.bounty.findFirst({
     where: {
-      repoFullName,
+      repoOwner,
+      repoName,
       issueNumber,
     },
     orderBy: {
@@ -479,7 +482,7 @@ export async function updateBountyComments(id: string): Promise<void> {
   if (bounty == null) {
     throw new Error("Bounty not found");
   }
-  const { owner, repo } = parseRepoFullName(bounty.repoFullName);
+  const { repoOwner: owner, repoName: repo } = bounty;
   const installationId = bounty.installationId ?? undefined;
 
   if (installationId == null) {

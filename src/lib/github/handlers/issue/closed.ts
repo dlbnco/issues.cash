@@ -28,8 +28,11 @@ export async function handleIssueClosed(
     return { success: true, message: "Ignored: issue not closed" };
   }
 
+  const { owner, repo } = parseRepoFullName(repository.full_name);
+
   const bounty = await getMostRecentBountyByIssueNumber(
-    repository.full_name,
+    owner,
+    repo,
     issue.number,
   );
 
@@ -39,8 +42,6 @@ export async function handleIssueClosed(
       message: "Ignored: no bounty found",
     };
   }
-
-  const { owner, repo } = parseRepoFullName(repository.full_name);
 
   const installationId =
     "installation" in payload ? payload.installation?.id : undefined;

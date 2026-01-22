@@ -31,7 +31,8 @@ model Bounty {
   status            BountyStatus @default(PENDING_FUNDING)
   feeAmount         BigInt?
   issueNumber       Int
-  repoFullName      String
+  repoOwner         String
+  repoName          String
   attempts          Attempt[]
   commentId         BigInt?
   installationId    Int?
@@ -39,7 +40,8 @@ model Bounty {
   @@index([status])
   @@index([issueUrl])
   @@index([contractAddress])
-  @@index([issueNumber, repoFullName])
+  @@index([issueNumber, repoOwner, repoName])
+  @@index([repoOwner])
 }
 
 model Attempt {

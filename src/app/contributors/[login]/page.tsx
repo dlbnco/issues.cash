@@ -76,17 +76,16 @@ export default async function ContributorPage({
         <div className="bg-base-100 border border-base-200 rounded-lg overflow-hidden">
           <div className="divide-y divide-base-200">
             {attempts.map((attempt) => {
-              const [owner, repo] = attempt.bounty.repoFullName.split("/");
               return (
                 <div
                   key={attempt.id}
                   className="flex items-center gap-3 py-3 px-4 hover:bg-base-200 font-mono text-sm transition-colors"
                 >
                   <Link
-                    href={`/projects/${owner}/${repo}`}
+                    href={`/projects/${attempt.bounty.repoOwner}/${attempt.bounty.repoName}`}
                     className="text-base-content/70 hover:text-primary shrink-0"
                   >
-                    {attempt.bounty.repoFullName}
+                    {attempt.bounty.repoOwner}/{attempt.bounty.repoName}
                   </Link>
                   <a
                     href={attempt.prUrl}

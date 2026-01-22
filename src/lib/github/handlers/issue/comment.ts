@@ -28,8 +28,12 @@ export async function handleIssueComment(
 
   if (action === "deleted") {
     try {
-      const bounty = await getMostRecentBountyByIssueNumber(
+      const { owner: delOwner, repo: delRepo } = parseRepoFullName(
         repository.full_name,
+      );
+      const bounty = await getMostRecentBountyByIssueNumber(
+        delOwner,
+        delRepo,
         issue.number,
       );
       if (bounty == null) throw new Error("Bounty not found");
@@ -86,7 +90,7 @@ export async function handleIssueComment(
   // Extract issue information
   const issueUrl = issue.html_url;
   const issueNumber = issue.number;
-  const repoFullName = repository.full_name;
+  const { owner, repo } = parseRepoFullName(repository.full_name);
   const authorAssociation = comment.author_association;
   const isMaintainer =
     authorAssociation === "OWNER" ||
@@ -95,7 +99,6 @@ export async function handleIssueComment(
 
   // Only allow repo maintainers to create bounties
   if (!isMaintainer) {
-    const { owner, repo } = parseRepoFullName(repoFullName);
     await postIssueComment(
       owner,
       repo,
@@ -111,7 +114,6 @@ export async function handleIssueComment(
   }
 
   if (issue.state === "closed") {
-    const { owner, repo } = parseRepoFullName(repoFullName);
     await postIssueComment(
       owner,
       repo,
@@ -137,7 +139,6 @@ export async function handleIssueComment(
   });
 
   if (existingBounty) {
-    const { owner, repo } = parseRepoFullName(repoFullName);
     await postIssueComment(
       owner,
       repo,
@@ -165,14 +166,14 @@ export async function handleIssueComment(
       throw new Error("Installation ID is not defined");
     }
 
-    const { owner, repo } = parseRepoFullName(repoFullName);
     const network = await getRepoBchNetwork(owner, repo, installationId);
 
     const bounty = await createBountyFromCommand({
       issueUrl,
       issueNumber,
       issueTitle: issue.title,
-      repoFullName,
+      repoOwner: owner,
+      repoName: repo,
       amountBCH: command.amount!,
       refundAddress: command.refundAddress!,
       expiryDays: command.expiryDays,
@@ -215,7 +216,6 @@ export async function handleIssueComment(
   } catch (error) {
     console.error("Error creating bounty:", error);
 
-    const { owner, repo } = parseRepoFullName(repoFullName);
     await postIssueComment(
       owner,
       repo,

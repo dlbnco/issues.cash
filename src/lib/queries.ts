@@ -3,7 +3,8 @@ import type { BountyStatus } from "@prisma/client";
 
 export interface BountyListItem {
   id: string;
-  repoFullName: string;
+  repoOwner: string;
+  repoName: string;
   issueNumber: number;
   issueTitle: string | null;
   issueUrl: string;
@@ -31,7 +32,8 @@ export async function getAllBounties(options?: {
     skip: offset,
     select: {
       id: true,
-      repoFullName: true,
+      repoOwner: true,
+      repoName: true,
       issueNumber: true,
       issueTitle: true,
       issueUrl: true,
@@ -56,16 +58,15 @@ export async function getAllBounties(options?: {
  */
 export async function getBountiesByRepo(
   owner: string,
-  repo: string
+  repo: string,
 ): Promise<BountyListItem[]> {
-  const repoFullName = `${owner}/${repo}`;
-
   const bounties = await prisma.bounty.findMany({
-    where: { repoFullName },
+    where: { repoOwner: owner, repoName: repo },
     orderBy: { createdAt: "desc" },
     select: {
       id: true,
-      repoFullName: true,
+      repoOwner: true,
+      repoName: true,
       issueNumber: true,
       issueTitle: true,
       issueUrl: true,
@@ -89,22 +90,22 @@ export async function getBountiesByRepo(
  * Get project stats for a repository
  */
 export async function getProjectStats(owner: string, repo: string) {
-  const repoFullName = `${owner}/${repo}`;
+  const where = { repoOwner: owner, repoName: repo };
 
   const [bounties, totals] = await Promise.all([
-    prisma.bounty.count({ where: { repoFullName } }),
+    prisma.bounty.count({ where }),
     prisma.bounty.aggregate({
-      where: { repoFullName },
+      where,
       _sum: { amount: true, fundedAmount: true },
     }),
   ]);
 
   const activeBounties = await prisma.bounty.count({
-    where: { repoFullName, status: "ACTIVE" },
+    where: { ...where, status: "ACTIVE" },
   });
 
   const claimedBounties = await prisma.bounty.count({
-    where: { repoFullName, status: "CLAIMED" },
+    where: { ...where, status: "CLAIMED" },
   });
 
   return {
@@ -126,7 +127,8 @@ export async function getAttemptsByContributor(login: string) {
     include: {
       bounty: {
         select: {
-          repoFullName: true,
+          repoOwner: true,
+          repoName: true,
           issueNumber: true,
           issueTitle: true,
           issueUrl: true,
@@ -156,7 +158,7 @@ export async function getActiveBountiesTotal(): Promise<bigint> {
  */
 export async function getTopOrganizations(limit: number = 10) {
   const result = await prisma.bounty.groupBy({
-    by: ["repoFullName"],
+    by: ["repoOwner"],
     _sum: {
       fundedAmount: true,
     },
@@ -171,16 +173,12 @@ export async function getTopOrganizations(limit: number = 10) {
     take: limit,
   });
 
-  return result.map((org) => {
-    const [owner, repo] = org.repoFullName.split("/");
-    return {
-      owner,
-      repo,
-      repoFullName: org.repoFullName,
-      totalFunded: org._sum.fundedAmount ?? BigInt(0),
-      bountiesCount: org._count.id,
-    };
-  });
+  return result.map((org) => ({
+    owner: org.repoOwner,
+    repo: org.repoName,
+    totalFunded: org._sum.fundedAmount ?? BigInt(0),
+    bountiesCount: org._count.id,
+  }));
 }
 
 /**
@@ -221,7 +219,7 @@ export async function getTopContributors(limit: number = 10) {
       const totalEarned = approvedAttempts.reduce(
         (sum, attempt) =>
           sum + (attempt.bounty.fundedAmount ?? attempt.bounty.amount),
-        BigInt(0)
+        BigInt(0),
       );
 
       return {
@@ -229,7 +227,7 @@ export async function getTopContributors(limit: number = 10) {
         claimedCount: contributor._count.id,
         totalEarned,
       };
-    })
+    }),
   );
 
   return contributorsWithEarnings;
@@ -257,7 +255,7 @@ export async function getContributorStats(login: string) {
 
   const totalEarned = approvedWithBounties.reduce(
     (sum, a) => sum + (a.bounty.fundedAmount ?? a.bounty.amount),
-    BigInt(0)
+    BigInt(0),
   );
 
   return {

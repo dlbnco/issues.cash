@@ -34,7 +34,8 @@ export async function handlePullRequestClosed(
             select: {
               id: true,
               issueNumber: true,
-              repoFullName: true,
+              repoOwner: true,
+              repoName: true,
             },
           },
         },

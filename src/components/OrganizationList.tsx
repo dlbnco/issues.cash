@@ -4,7 +4,6 @@ import Link from "next/link";
 interface Organization {
   owner: string;
   repo: string;
-  repoFullName: string;
   totalFunded: bigint;
   bountiesCount: number;
 }
@@ -35,7 +34,7 @@ export function OrganizationList({
 
         return (
           <Link
-            key={org.repoFullName}
+            key={`${org.owner}/${org.repo}`}
             href={`/projects/${org.owner}/${org.repo}`}
             className="grid grid-cols-[auto_1fr_auto_auto] gap-3 items-center py-3 px-4 font-mono text-sm hover:bg-base-200 transition-colors"
           >
@@ -45,9 +44,10 @@ export function OrganizationList({
               alt={org.owner}
               className="rounded-full w-6 h-6"
             />
-            <div className="truncate">{org.repoFullName}</div>
+            <div className="truncate">{org.owner}</div>
             <div className="text-base-content/60 whitespace-nowrap">
-              {org.bountiesCount} {org.bountiesCount === 1 ? "bounty" : "bounties"}
+              {org.bountiesCount}{" "}
+              {org.bountiesCount === 1 ? "bounty" : "bounties"}
             </div>
             <div className="text-success font-semibold whitespace-nowrap text-right">
               {formattedAmount} BCH

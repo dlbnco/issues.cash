@@ -44,7 +44,8 @@ async function backfillIssueTitles() {
     },
     select: {
       id: true,
-      repoFullName: true,
+      repoOwner: true,
+      repoName: true,
       issueNumber: true,
     },
   });
@@ -52,10 +53,9 @@ async function backfillIssueTitles() {
   console.log(`Found ${bounties.length} bounties without issue titles`);
 
   for (const bounty of bounties) {
-    const [owner, repo] = bounty.repoFullName.split("/");
-    console.log(`Fetching title for ${owner}/${repo}#${bounty.issueNumber}...`);
+    console.log(`Fetching title for ${bounty.repoOwner}/${bounty.repoName}#${bounty.issueNumber}...`);
 
-    const title = await fetchIssueTitle(owner, repo, bounty.issueNumber);
+    const title = await fetchIssueTitle(bounty.repoOwner, bounty.repoName, bounty.issueNumber);
 
     if (title) {
       await prisma.bounty.update({
