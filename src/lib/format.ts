@@ -1,11 +1,36 @@
 import type { Attempt } from "@prisma/client";
 import { Network } from "cashscript";
 
+interface FormatBCHOptions {
+  /** Include "BCH" symbol suffix (default: false) */
+  symbol?: boolean;
+  /** Strip trailing zeros (default: false) */
+  stripZeros?: boolean;
+}
+
 /**
  * Format satoshis to BCH string
+ * @param satoshis - Amount in satoshis
+ * @param options - Formatting options
+ * @returns Formatted BCH string
+ *
+ * @example
+ * formatBCH(123450000) // "1.23450000"
+ * formatBCH(123450000, { symbol: true }) // "1.2345 BCH"
+ * formatBCH(123450000, { stripZeros: true }) // "1.2345"
+ * formatBCH(123450000, { symbol: true, stripZeros: true }) // "1.2345 BCH"
  */
-export function formatBCH(satoshis: number | bigint): string {
-  return (Number(satoshis) / 100_000_000).toFixed(8);
+export function formatBCH(
+  satoshis: number | bigint,
+  options?: FormatBCHOptions,
+): string {
+  const { symbol = false, stripZeros = false } = options ?? {};
+  const bch = Number(satoshis) / 100_000_000;
+
+  // Strip trailing zeros using parseFloat, or keep full precision
+  const formatted = (stripZeros || symbol) ? String(parseFloat(bch.toFixed(8))) : bch.toFixed(8);
+
+  return symbol ? `${formatted} BCH` : formatted;
 }
 
 /**

@@ -35,7 +35,7 @@ export async function handlePullRequestOpenedOrEdited(
   const prNumber = pull_request.number;
   const prUrl = pull_request.html_url;
   const contributorLogin = pull_request.user?.login ?? "unknown";
-  const repoFullName = repository.full_name;
+  const { owner, repo } = parseRepoFullName(repository.full_name);
 
   // Check if PR body contains a /claim command
   if (!prBody.includes("/claim")) {
@@ -44,7 +44,6 @@ export async function handlePullRequestOpenedOrEdited(
 
   // Parse the claim command
   const claimCommand = parseClaimCommand(prBody);
-  const { owner, repo } = parseRepoFullName(repoFullName);
   const installationId =
     "installation" in payload ? payload.installation?.id : undefined;
 
@@ -66,7 +65,8 @@ export async function handlePullRequestOpenedOrEdited(
 
   // Find the bounty for the claimed issue
   const bounty = await getMostRecentBountyByIssueNumber(
-    repoFullName,
+    owner,
+    repo,
     claimCommand.issueNumber!,
   );
 
