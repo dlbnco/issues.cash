@@ -3,7 +3,7 @@
 
 @theme inline {
   --font-sans: var(--font-geist-sans);
-  --font-mono: "Cartograph CF";
+  --font-mono: var(--font-space-mono);
 }
 
 body {
