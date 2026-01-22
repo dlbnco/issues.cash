@@ -27,6 +27,22 @@ ${error}
 **Example:** \`/bounty 2.35 --refund bitcoincash:qp...\``;
 }
 
+export function networkMismatchError(
+  network: string,
+  expectedPrefix: string,
+  error: string
+): string {
+  return `❌ **Address Network Mismatch**
+
+${error}
+
+This repository is configured for **${network}**. Addresses must start with \`${expectedPrefix}\`.
+
+**Examples:**
+- Mainnet: \`bitcoincash:qp3wjpa3tjlj042z2wv7hahzkkprgllgnsyynhyaka\`
+- Testnet: \`bchtest:qp3wjpa3tjlj042z2wv7hahzkkprgllgnsn45dme9u\``;
+}
+
 export function unauthorizedError(authorAssociation: string): string {
   return `❌ **Unauthorized**
 

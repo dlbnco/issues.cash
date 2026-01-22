@@ -7,7 +7,7 @@ import {
   createBountyFromCommand,
   getMostRecentBountyByIssueNumber,
 } from "@/lib/bounty";
-import { parseCommand } from "@/lib/commands";
+import { parseCommand, validateAddressForNetwork } from "@/lib/commands";
 import {
   postIssueComment,
   parseRepoFullName,
@@ -167,6 +167,30 @@ export async function handleIssueComment(
     }
 
     const network = await getRepoBchNetwork(owner, repo, installationId);
+
+    // Validate address matches the repository's network
+    const addressValidation = validateAddressForNetwork(
+      command.refundAddress!,
+      network
+    );
+    if (!addressValidation.valid) {
+      await postIssueComment(
+        owner,
+        repo,
+        issueNumber,
+        messages.networkMismatchError(
+          network,
+          network === "mainnet" ? "bitcoincash:" : "bchtest:",
+          addressValidation.error!
+        ),
+        installationId
+      );
+
+      return {
+        success: false,
+        error: addressValidation.error,
+      };
+    }
 
     const bounty = await createBountyFromCommand({
       issueUrl,
