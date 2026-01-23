@@ -269,3 +269,102 @@ High-level bounty operations:
 - Input validation for all command parameters
 - Oracle keys stored separately per network (testnet/mainnet)
 - Oracle keys automatically added to `.gitignore`
+
+## GitLab Webhook Integration
+
+### Overview
+
+GitLab integration works similarly to GitHub but uses a different authentication model:
+- **TOFU (Trust-On-First-Use)**: Per-project credentials stored on first webhook
+- **Webhook secret format**: `secret|token` (token is optional for posting comments)
+- **Self-hosted support**: Works with both gitlab.com and self-hosted instances
+
+### Setup (Per GitLab Project)
+
+1. **Go to your GitLab project**: Settings → Webhooks → Add new webhook
+
+2. **Configure webhook**:
+   - URL: `https://issues.cash/api/webhooks/gitlab`
+   - Secret token: `your-secret|glpat-xxxxxxxxxxxx` (token part optional)
+   - Trigger: Check "Comments", "Issues events", "Merge request events"
+   - SSL verification: Enable (recommended)
+
+3. **Optional: Create access token for bot comments**:
+   - Go to Settings → Access Tokens
+   - Create token with `api` scope
+   - Add token to webhook secret: `your-secret|glpat-your-token`
+
+### Webhook Secret Format
+
+```
+secret|token
+```
+
+- `secret`: Required. Used to verify webhook authenticity.
+- `token`: Optional. GitLab access token for posting comments.
+
+Examples:
+- Without comments: `mysecretkey123`
+- With comments: `mysecretkey123|glpat-xxxxxxxxxxxxxxxxxxxx`
+
+### Supported Events
+
+| GitLab Event | Handler | Action |
+|--------------|---------|--------|
+| Note Hook (Issue comment) | `handleNoteOnIssue()` | Parse `/bounty` command |
+| Issue Hook (closed) | `handleIssueClosed()` | Refund bounty |
+| Merge Request Hook (open/update) | `handleMergeRequest()` | Parse `/claim` command |
+| Merge Request Hook (merge) | `handleMergeRequest()` | Payout to contributor |
+| Merge Request Hook (close) | `handleMergeRequest()` | Reject claim |
+
+### Commands
+
+Same syntax as GitHub:
+
+**Create bounty** (on issue):
+```
+/bounty <amount> --refund <address> [--expiry <days>]
+```
+
+**Claim bounty** (on merge request):
+```
+/claim <issue_number> --address <your_address>
+```
+
+### Network Configuration
+
+To set the BCH network for a GitLab project, add a CI/CD variable:
+- Go to Settings → CI/CD → Variables
+- Add variable: `BCH_NETWORK` = `mainnet` or `testnet3`
+
+If not set, defaults to `mainnet`.
+
+### File Structure
+
+```
+src/lib/gitlab/
+├── api.ts          # GitLab API client
+├── types.ts        # Webhook payload types
+├── verify.ts       # TOFU credential verification
+└── handlers/
+    ├── note.ts          # Issue comment handler
+    ├── issue.ts         # Issue closed handler
+    └── merge-request.ts # MR events handler
+```
+
+### Database Model
+
+GitLab projects are stored in `GitLabProject` table (TOFU):
+- `projectId`: GitLab numeric project ID
+- `pathWithNamespace`: e.g., "myorg/myrepo"
+- `instanceUrl`: e.g., "https://gitlab.com"
+- `webhookSecret`: Stored secret for verification
+- `accessToken`: Optional token for API calls
+
+Bounties have:
+- `platform`: "GITHUB" or "GITLAB"
+- `gitlabProjectId`: FK to GitLabProject (null for GitHub)
+
+### Self-Hosted GitLab
+
+For self-hosted instances, the instance URL is automatically extracted from the webhook payload's `project.web_url`. No additional configuration needed.

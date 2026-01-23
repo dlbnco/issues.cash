@@ -24,7 +24,7 @@ import {
   claimRegisteredMessage,
   claimRejectedMessage,
 } from "./messages";
-import { AttemptStatus, BCHNetwork, BountyStatus } from "@prisma/client";
+import { AttemptStatus, BCHNetwork, BountyStatus, Platform } from "@prisma/client";
 import { UNLOCKING_TX_FEE_AMOUNT } from "./constants";
 import {
   fromElectrumToPrismaNetwork,
@@ -41,7 +41,11 @@ export interface CreateBountyParams {
   refundAddress: string;
   expiryDays?: number;
   network?: Network;
+  // GitHub-specific
   installationId?: number;
+  // GitLab-specific
+  platform?: Platform;
+  gitlabProjectId?: string;
 }
 
 export interface BountyInfo {
@@ -74,6 +78,8 @@ export async function createBountyFromCommand(
     expiryDays = 90,
     network,
     installationId,
+    platform = "GITHUB",
+    gitlabProjectId,
   } = params;
 
   // Validate network
@@ -125,6 +131,8 @@ export async function createBountyFromCommand(
       status: "PENDING_FUNDING",
       installationId,
       network: fromElectrumToPrismaNetwork(network),
+      platform,
+      gitlabProjectId,
     },
   });
 

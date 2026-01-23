@@ -12,11 +12,17 @@ enum BCHNetwork {
   MAINNET
 }
 
+enum Platform {
+  GITHUB
+  GITLAB
+}
+
 model Bounty {
   id                String       @id @default(cuid())
   createdAt         DateTime     @default(now())
   updatedAt         DateTime     @updatedAt
-  network BCHNetwork
+  network           BCHNetwork
+  platform          Platform     @default(GITHUB)
   fundedAt          DateTime?
   issueUrl          String
   issueHash         String
@@ -37,11 +43,16 @@ model Bounty {
   commentId         BigInt?
   installationId    Int?
 
+  // GitLab-specific (null for GitHub bounties)
+  gitlabProject     GitLabProject? @relation(fields: [gitlabProjectId], references: [id])
+  gitlabProjectId   String?
+
   @@index([status])
   @@index([issueUrl])
   @@index([contractAddress])
   @@index([issueNumber, repoOwner, repoName])
   @@index([repoOwner])
+  @@index([platform])
 }
 
 model Attempt {
@@ -75,4 +86,26 @@ enum AttemptStatus {
   PENDING
   APPROVED
   REJECTED
+}
+
+// GitLab project credentials (Trust-On-First-Use)
+model GitLabProject {
+  id                String   @id @default(cuid())
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  // Project identification
+  projectId         Int      // GitLab project ID (numeric)
+  pathWithNamespace String   // e.g., "myorg/myrepo"
+  instanceUrl       String   @default("https://gitlab.com")
+
+  // Credentials (stored on first valid webhook)
+  webhookSecret     String   // The secret part (hashed)
+  accessToken       String?  // The token part (encrypted, for bot comments)
+
+  // Relations
+  bounties          Bounty[]
+
+  @@unique([projectId, instanceUrl])
+  @@index([pathWithNamespace])
 }

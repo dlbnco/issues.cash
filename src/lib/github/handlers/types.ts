@@ -1,10 +1,2 @@
-export interface WebhookResponse {
-  success: boolean;
-  message?: string;
-  error?: string;
-  bounty?: {
-    id: string;
-    contractAddress: string;
-    amount: number;
-  };
-}
+// Re-export shared webhook types for GitHub handlers
+export { type WebhookResponse } from "@/lib/webhooks/types";
