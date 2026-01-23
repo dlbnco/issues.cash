@@ -138,6 +138,21 @@ Bitcoin Cash uses CashAddress format (e.g., `bitcoincash:qp...`). For testnet, p
 - Get testnet coins: https://tbch.googol.cash/
 - Explorer: https://testnet.bch.loping.net/
 
+### Website Network Filtering
+
+The website can be configured to display bounties from a specific network only:
+
+- `NEXT_PUBLIC_BCH_NETWORK` - Set to `"mainnet"` or `"testnet3"` (default: `"mainnet"`)
+
+This is a **client-side filter only**. The server/database handles all networks:
+- GitHub webhooks receive events for all networks (GitHub can't differentiate)
+- Database stores bounties from all networks with a `network` field
+- Website UI filters by `NEXT_PUBLIC_BCH_NETWORK` env var
+
+Deployment pattern for multiple networks:
+- `issues.cash` deploys with `NEXT_PUBLIC_BCH_NETWORK=mainnet`
+- `testnet.issues.cash` deploys same app with `NEXT_PUBLIC_BCH_NETWORK=testnet3`
+
 ## Path Aliases
 
 TypeScript paths configured with `@/*` alias mapping to `./src/*`:

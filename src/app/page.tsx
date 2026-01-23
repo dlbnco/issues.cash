@@ -12,17 +12,20 @@ import {
   getGlobalStats,
 } from "@/lib/queries";
 import { formatBCH } from "@/lib/format";
+import { getWebsiteNetwork } from "@/lib/network-filter";
 
 export const revalidate = 60;
 
 export default async function HomePage() {
+  const network = getWebsiteNetwork();
+
   const [bounties, totalAmount, organizations, contributors, globalStats] =
     await Promise.all([
-      getAllBounties({ status: ["ACTIVE"] }),
-      getActiveBountiesTotal(),
-      getTopOrganizations(10),
-      getTopContributors(10),
-      getGlobalStats(),
+      getAllBounties({ status: ["ACTIVE"], network }),
+      getActiveBountiesTotal(network),
+      getTopOrganizations(10, network),
+      getTopContributors(10, network),
+      getGlobalStats(network),
     ]);
 
   return (

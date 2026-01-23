@@ -2,6 +2,7 @@ import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
 import { getAttemptsByContributor, getContributorStats } from "@/lib/queries";
 import { formatBCH } from "@/lib/format";
+import { getWebsiteNetwork } from "@/lib/network-filter";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
@@ -26,9 +27,11 @@ export default async function ContributorPage({
   params,
 }: ContributorPageProps) {
   const { login } = await params;
+  const network = getWebsiteNetwork();
+
   const [attempts, stats] = await Promise.all([
-    getAttemptsByContributor(login),
-    getContributorStats(login),
+    getAttemptsByContributor(login, network),
+    getContributorStats(login, network),
   ]);
 
   if (attempts.length === 0) {
