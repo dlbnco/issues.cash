@@ -368,3 +368,41 @@ Bounties have:
 ### Self-Hosted GitLab
 
 For self-hosted instances, the instance URL is automatically extracted from the webhook payload's `project.web_url`. No additional configuration needed.
+
+### Token Refresh Behavior
+
+The GitLab integration uses TOFU (Trust-On-First-Use) with automatic token refresh:
+
+1. **First webhook**: Credentials are stored (secret + optional token)
+2. **Subsequent webhooks**: If the webhook brings a different token (but same secret), the stored token is automatically updated
+3. **Background jobs**: Use the most recently stored token
+
+This means you can rotate your GitLab access token at any time:
+1. Generate a new token in GitLab (Settings → Access Tokens)
+2. Update the webhook secret to include the new token: `your-secret|new-glpat-xxx`
+3. The next webhook will automatically update the stored token
+
+**Note**: Reading CI/CD variables (for `BCH_NETWORK`) requires **Maintainer** role. Developer role tokens will fall back to the default network (mainnet).
+
+### Cron Job Support
+
+The `checkPendingBounties()` cron job works for both GitHub and GitLab bounties:
+- **GitHub**: Uses the stored `installationId` with GitHub App credentials
+- **GitLab**: Uses the stored access token from the `GitLabProject` table
+
+If a GitLab project has no stored access token, comments won't be posted but the bounty status will still be updated in the database.
+
+### Cancel Bounty Command
+
+Maintainers can cancel pending (unfunded) bounties:
+
+```
+/bounty cancel
+```
+
+This will:
+1. Delete the bounty from the database
+2. Delete the bot's funding instructions comment
+3. Post a confirmation message
+
+Only works for bounties with `PENDING_FUNDING` status. Funded bounties cannot be cancelled (close the issue to trigger a refund instead).

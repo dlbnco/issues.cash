@@ -74,9 +74,21 @@ export async function verifyOrRegisterProject(
       return null;
     }
 
+    // Auto-refresh: if incoming token differs from stored, update it
+    if (token && token !== existingProject.accessToken) {
+      console.log(
+        `🔄 Refreshing access token for GitLab project ${pathWithNamespace}`
+      );
+      await prisma.gitLabProject.update({
+        where: { id: existingProject.id },
+        data: { accessToken: token },
+      });
+    }
+
+    // Return fresh token from webhook for immediate use (fallback to stored)
     return {
       secret: existingProject.webhookSecret,
-      accessToken: existingProject.accessToken,
+      accessToken: token ?? existingProject.accessToken,
       projectId: existingProject.id,
     };
   }

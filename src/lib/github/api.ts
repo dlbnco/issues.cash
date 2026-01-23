@@ -233,6 +233,39 @@ export async function createOrUpdateComment(
 }
 
 /**
+ * Delete an issue comment
+ */
+export async function deleteIssueComment(
+  owner: string,
+  repo: string,
+  commentId: bigint,
+  installationId?: number,
+): Promise<boolean> {
+  const octokit = getOctokit(installationId);
+
+  if (!octokit) {
+    console.error(
+      "Cannot delete comment: GitHub authentication not configured",
+    );
+    return false;
+  }
+
+  try {
+    await octokit.rest.issues.deleteComment({
+      owner,
+      repo,
+      comment_id: Number(commentId),
+    });
+
+    console.log(`✅ Deleted comment ${commentId} in ${owner}/${repo}`);
+    return true;
+  } catch (error) {
+    console.error("Failed to delete GitHub comment:", error);
+    return false;
+  }
+}
+
+/**
  * Parse repository full name into owner and repo
  */
 export function parseRepoFullName(fullName: string): {

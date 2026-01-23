@@ -108,6 +108,42 @@ export async function postIssueNote(
 }
 
 /**
+ * Delete a note on an issue
+ */
+export async function deleteIssueNote(
+  instanceUrl: string,
+  projectId: number,
+  issueIid: number,
+  noteId: bigint,
+  accessToken: string
+): Promise<boolean> {
+  const config: GitLabApiConfig = {
+    instanceUrl: instanceUrl || DEFAULT_GITLAB_INSTANCE,
+    accessToken,
+  };
+
+  try {
+    await fetch(
+      `${config.instanceUrl}/api/v4/projects/${projectId}/issues/${issueIid}/notes/${noteId}`,
+      {
+        method: "DELETE",
+        headers: {
+          "PRIVATE-TOKEN": config.accessToken,
+        },
+      }
+    );
+
+    console.log(
+      `✅ Deleted note ${noteId} in GitLab project ${projectId} issue #${issueIid}`
+    );
+    return true;
+  } catch (error) {
+    console.error("Failed to delete GitLab note:", error);
+    return false;
+  }
+}
+
+/**
  * Update an existing note on an issue
  */
 export async function updateIssueNote(

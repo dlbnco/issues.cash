@@ -398,3 +398,21 @@ The maintainer can now reclaim the funds using the \`timeout()\` function.
 
 ${CREDITS}`;
 }
+
+export function bountyCancelledMessage(username: string): string {
+  return `**Bounty cancelled** by @${username}
+
+${CREDITS}`;
+}
+
+export function noPendingBountyError(): string {
+  return `**No pending bounty to cancel**
+
+There is no pending (unfunded) bounty for this issue.`;
+}
+
+export function bountyAlreadyFundedError(): string {
+  return `**Cannot cancel: bounty is already funded**
+
+This bounty has already been funded and is now active. To get a refund, close the issue instead.`;
+}

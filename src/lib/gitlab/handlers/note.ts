@@ -12,6 +12,7 @@ import { createBountyFromCommand, getMostRecentBountyByIssueNumber } from "@/lib
 import { parseCommand, validateAddressForNetwork } from "@/lib/commands";
 import {
   postIssueNote,
+  deleteIssueNote,
   parsePathWithNamespace,
   constructIssueUrl,
   extractInstanceUrl,
@@ -111,6 +112,18 @@ export async function handleNoteOnIssue(
     // For now, we'll trust that the webhook is configured correctly
     console.warn(
       `⚠️ Cannot verify maintainer status for ${user.username} - no access token`
+    );
+  }
+
+  // Handle cancel command
+  if (command.type === "cancel") {
+    return handleCancelCommand(
+      instanceUrl,
+      project.id,
+      issueUrl,
+      issueNumber,
+      user.username,
+      credentials.accessToken ?? undefined,
     );
   }
 
@@ -312,4 +325,94 @@ export async function handleNoteDeleted(
       error: (error as Error).message,
     };
   }
+}
+
+/**
+ * Handle /bounty cancel command
+ * Deletes a pending (unfunded) bounty and its associated bot comment
+ */
+async function handleCancelCommand(
+  instanceUrl: string,
+  projectId: number,
+  issueUrl: string,
+  issueIid: number,
+  username: string,
+  accessToken?: string,
+): Promise<WebhookResponse> {
+  // Find existing bounty for this issue
+  const bounty = await prisma.bounty.findFirst({
+    where: {
+      issueUrl,
+      status: {
+        notIn: [BountyStatus.REFUNDED, BountyStatus.EXPIRED],
+      },
+    },
+  });
+
+  if (!bounty) {
+    if (accessToken) {
+      await postIssueNote(
+        instanceUrl,
+        projectId,
+        issueIid,
+        messages.noPendingBountyError(),
+        accessToken,
+      );
+    }
+
+    return {
+      success: false,
+      error: "No pending bounty to cancel",
+    };
+  }
+
+  // Check if bounty is already funded
+  if (bounty.status !== BountyStatus.PENDING_FUNDING) {
+    if (accessToken) {
+      await postIssueNote(
+        instanceUrl,
+        projectId,
+        issueIid,
+        messages.bountyAlreadyFundedError(),
+        accessToken,
+      );
+    }
+
+    return {
+      success: false,
+      error: "Cannot cancel: bounty is already funded",
+    };
+  }
+
+  // Delete the bot's bounty comment if it exists
+  if (bounty.commentId && accessToken) {
+    await deleteIssueNote(
+      instanceUrl,
+      projectId,
+      issueIid,
+      bounty.commentId,
+      accessToken,
+    );
+  }
+
+  // Delete the bounty from database
+  await prisma.bounty.delete({
+    where: { id: bounty.id },
+  });
+
+  // Post confirmation message
+  if (accessToken) {
+    await postIssueNote(
+      instanceUrl,
+      projectId,
+      issueIid,
+      messages.bountyCancelledMessage(username),
+      accessToken,
+    );
+  }
+
+  return {
+    success: true,
+    message: "Bounty cancelled",
+  };
 }
