@@ -3,6 +3,7 @@ import { Footer } from "@/components/Footer";
 import { BountyList } from "@/components/BountyList";
 import { getBountiesByOwner, getOwnerStats, getReposByOwner } from "@/lib/queries";
 import { formatBCH } from "@/lib/format";
+import { getWebsiteNetwork } from "@/lib/network-filter";
 import { notFound } from "next/navigation";
 import Image from "next/image";
 import Link from "next/link";
@@ -25,10 +26,12 @@ export async function generateMetadata({ params }: OrgPageProps) {
 
 export default async function OrgPage({ params }: OrgPageProps) {
   const { owner } = await params;
+  const network = getWebsiteNetwork();
+
   const [bounties, stats, repos] = await Promise.all([
-    getBountiesByOwner(owner),
-    getOwnerStats(owner),
-    getReposByOwner(owner),
+    getBountiesByOwner(owner, network),
+    getOwnerStats(owner, network),
+    getReposByOwner(owner, network),
   ]);
 
   if (bounties.length === 0) {

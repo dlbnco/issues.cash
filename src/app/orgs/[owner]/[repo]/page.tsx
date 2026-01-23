@@ -3,6 +3,7 @@ import { Footer } from "@/components/Footer";
 import { BountyList } from "@/components/BountyList";
 import { getBountiesByRepo, getProjectStats } from "@/lib/queries";
 import { formatBCH } from "@/lib/format";
+import { getWebsiteNetwork } from "@/lib/network-filter";
 import { notFound } from "next/navigation";
 import Image from "next/image";
 
@@ -25,9 +26,11 @@ export async function generateMetadata({ params }: ProjectPageProps) {
 
 export default async function ProjectPage({ params }: ProjectPageProps) {
   const { owner, repo } = await params;
+  const network = getWebsiteNetwork();
+
   const [bounties, stats] = await Promise.all([
-    getBountiesByRepo(owner, repo),
-    getProjectStats(owner, repo),
+    getBountiesByRepo(owner, repo, network),
+    getProjectStats(owner, repo, network),
   ]);
 
   if (bounties.length === 0) {

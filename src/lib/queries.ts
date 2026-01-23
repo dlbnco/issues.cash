@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import type { BountyStatus } from "@prisma/client";
+import type { BCHNetwork, BountyStatus } from "@prisma/client";
 
 export interface BountyListItem {
   id: string;
@@ -22,11 +22,15 @@ export async function getAllBounties(options?: {
   status?: BountyStatus[];
   limit?: number;
   offset?: number;
+  network?: BCHNetwork;
 }): Promise<BountyListItem[]> {
-  const { status, limit = 50, offset = 0 } = options ?? {};
+  const { status, limit = 50, offset = 0, network } = options ?? {};
 
   const bounties = await prisma.bounty.findMany({
-    where: status ? { status: { in: status } } : undefined,
+    where: {
+      ...(status ? { status: { in: status } } : {}),
+      ...(network ? { network } : {}),
+    },
     orderBy: { createdAt: "desc" },
     take: limit,
     skip: offset,
@@ -59,9 +63,14 @@ export async function getAllBounties(options?: {
 export async function getBountiesByRepo(
   owner: string,
   repo: string,
+  network?: BCHNetwork,
 ): Promise<BountyListItem[]> {
   const bounties = await prisma.bounty.findMany({
-    where: { repoOwner: owner, repoName: repo },
+    where: {
+      repoOwner: owner,
+      repoName: repo,
+      ...(network ? { network } : {}),
+    },
     orderBy: { createdAt: "desc" },
     select: {
       id: true,
@@ -89,8 +98,16 @@ export async function getBountiesByRepo(
 /**
  * Get project stats for a repository
  */
-export async function getProjectStats(owner: string, repo: string) {
-  const where = { repoOwner: owner, repoName: repo };
+export async function getProjectStats(
+  owner: string,
+  repo: string,
+  network?: BCHNetwork,
+) {
+  const where = {
+    repoOwner: owner,
+    repoName: repo,
+    ...(network ? { network } : {}),
+  };
 
   const [bounties, totals] = await Promise.all([
     prisma.bounty.count({ where }),
@@ -120,9 +137,15 @@ export async function getProjectStats(owner: string, repo: string) {
 /**
  * Get attempts by contributor login
  */
-export async function getAttemptsByContributor(login: string) {
+export async function getAttemptsByContributor(
+  login: string,
+  network?: BCHNetwork,
+) {
   return await prisma.attempt.findMany({
-    where: { contributorLogin: login },
+    where: {
+      contributorLogin: login,
+      ...(network ? { bounty: { network } } : {}),
+    },
     orderBy: { createdAt: "desc" },
     include: {
       bounty: {
@@ -144,9 +167,14 @@ export async function getAttemptsByContributor(login: string) {
 /**
  * Get total amount of active bounties in satoshis
  */
-export async function getActiveBountiesTotal(): Promise<bigint> {
+export async function getActiveBountiesTotal(
+  network?: BCHNetwork,
+): Promise<bigint> {
   const result = await prisma.bounty.aggregate({
-    where: { status: "ACTIVE" },
+    where: {
+      status: "ACTIVE",
+      ...(network ? { network } : {}),
+    },
     _sum: { fundedAmount: true },
   });
 
@@ -156,9 +184,13 @@ export async function getActiveBountiesTotal(): Promise<bigint> {
 /**
  * Get top organizations by total funded amount
  */
-export async function getTopOrganizations(limit: number = 10) {
+export async function getTopOrganizations(
+  limit: number = 10,
+  network?: BCHNetwork,
+) {
   const result = await prisma.bounty.groupBy({
     by: ["repoOwner"],
+    where: network ? { network } : undefined,
     _sum: {
       fundedAmount: true,
     },
@@ -183,9 +215,15 @@ export async function getTopOrganizations(limit: number = 10) {
 /**
  * Get all bounties for an organization (all repos)
  */
-export async function getBountiesByOwner(owner: string): Promise<BountyListItem[]> {
+export async function getBountiesByOwner(
+  owner: string,
+  network?: BCHNetwork,
+): Promise<BountyListItem[]> {
   const bounties = await prisma.bounty.findMany({
-    where: { repoOwner: owner },
+    where: {
+      repoOwner: owner,
+      ...(network ? { network } : {}),
+    },
     orderBy: { createdAt: "desc" },
     select: {
       id: true,
@@ -213,8 +251,11 @@ export async function getBountiesByOwner(owner: string): Promise<BountyListItem[
 /**
  * Get stats for an organization (all repos)
  */
-export async function getOwnerStats(owner: string) {
-  const where = { repoOwner: owner };
+export async function getOwnerStats(owner: string, network?: BCHNetwork) {
+  const where = {
+    repoOwner: owner,
+    ...(network ? { network } : {}),
+  };
 
   const [bounties, totals] = await Promise.all([
     prisma.bounty.count({ where }),
@@ -244,10 +285,13 @@ export async function getOwnerStats(owner: string) {
 /**
  * Get repos with bounty counts for an organization
  */
-export async function getReposByOwner(owner: string) {
+export async function getReposByOwner(owner: string, network?: BCHNetwork) {
   const result = await prisma.bounty.groupBy({
     by: ["repoName"],
-    where: { repoOwner: owner },
+    where: {
+      repoOwner: owner,
+      ...(network ? { network } : {}),
+    },
     _sum: {
       fundedAmount: true,
     },
@@ -271,11 +315,15 @@ export async function getReposByOwner(owner: string) {
 /**
  * Get top contributors by claimed bounties
  */
-export async function getTopContributors(limit: number = 10) {
+export async function getTopContributors(
+  limit: number = 10,
+  network?: BCHNetwork,
+) {
   const result = await prisma.attempt.groupBy({
     by: ["contributorLogin"],
     where: {
       status: "APPROVED",
+      ...(network ? { bounty: { network } } : {}),
     },
     _count: {
       id: true,
@@ -295,6 +343,7 @@ export async function getTopContributors(limit: number = 10) {
         where: {
           contributorLogin: contributor.contributorLogin,
           status: "APPROVED",
+          ...(network ? { bounty: { network } } : {}),
         },
         include: {
           bounty: {
@@ -323,7 +372,9 @@ export async function getTopContributors(limit: number = 10) {
 /**
  * Get global platform stats for homepage
  */
-export async function getGlobalStats() {
+export async function getGlobalStats(network?: BCHNetwork) {
+  const networkFilter = network ? { network } : {};
+
   const [
     activeBountiesTotal,
     pendingBountiesTotal,
@@ -334,31 +385,38 @@ export async function getGlobalStats() {
   ] = await Promise.all([
     // BCH in active bounties
     prisma.bounty.aggregate({
-      where: { status: "ACTIVE" },
+      where: { status: "ACTIVE", ...networkFilter },
       _sum: { fundedAmount: true },
     }),
     // BCH in pending bounties
     prisma.bounty.aggregate({
-      where: { status: "PENDING_FUNDING" },
+      where: { status: "PENDING_FUNDING", ...networkFilter },
       _sum: { amount: true },
     }),
     // Total BCH paid out (claimed bounties)
     prisma.bounty.aggregate({
-      where: { status: "CLAIMED" },
+      where: { status: "CLAIMED", ...networkFilter },
       _sum: { fundedAmount: true },
     }),
     // Total successful claims
     prisma.attempt.count({
-      where: { status: "APPROVED" },
+      where: {
+        status: "APPROVED",
+        ...(network ? { bounty: { network } } : {}),
+      },
     }),
     // Total unique contributors (with approved claims)
     prisma.attempt.groupBy({
       by: ["contributorLogin"],
-      where: { status: "APPROVED" },
+      where: {
+        status: "APPROVED",
+        ...(network ? { bounty: { network } } : {}),
+      },
     }),
     // Total unique organizations
     prisma.bounty.groupBy({
       by: ["repoOwner"],
+      where: networkFilter,
     }),
   ]);
 
@@ -375,20 +433,24 @@ export async function getGlobalStats() {
 /**
  * Get contributor stats
  */
-export async function getContributorStats(login: string) {
+export async function getContributorStats(login: string, network?: BCHNetwork) {
+  const networkFilter = network ? { bounty: { network } } : {};
+
   const [totalAttempts, approvedAttempts, pendingAttempts] = await Promise.all([
-    prisma.attempt.count({ where: { contributorLogin: login } }),
     prisma.attempt.count({
-      where: { contributorLogin: login, status: "APPROVED" },
+      where: { contributorLogin: login, ...networkFilter },
     }),
     prisma.attempt.count({
-      where: { contributorLogin: login, status: "PENDING" },
+      where: { contributorLogin: login, status: "APPROVED", ...networkFilter },
+    }),
+    prisma.attempt.count({
+      where: { contributorLogin: login, status: "PENDING", ...networkFilter },
     }),
   ]);
 
   // Calculate total earned
   const approvedWithBounties = await prisma.attempt.findMany({
-    where: { contributorLogin: login, status: "APPROVED" },
+    where: { contributorLogin: login, status: "APPROVED", ...networkFilter },
     include: { bounty: { select: { amount: true, fundedAmount: true } } },
   });
 
