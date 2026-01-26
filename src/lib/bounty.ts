@@ -243,7 +243,7 @@ export async function checkPendingBounties(): Promise<{
         let newCommentId: number | bigint | undefined;
 
         switch (bounty.platform) {
-          case "GITLAB": {
+          case Platform.GITLAB: {
             if (!bounty.gitlabProjectId) break;
 
             const gitlabProject = await prisma.gitLabProject.findUnique({
@@ -276,7 +276,7 @@ export async function checkPendingBounties(): Promise<{
             }
             break;
           }
-          case "GITHUB":
+          case Platform.GITHUB:
           default: {
             if (bounty.commentId == null) {
               newCommentId = await postIssueComment(
@@ -583,7 +583,7 @@ export async function updateBountyComments(id: string): Promise<void> {
 
     // Platform-specific comment posting
     switch (bounty.platform) {
-      case "GITLAB": {
+      case Platform.GITLAB: {
         const { gitlabProject } = bounty;
         if (!gitlabProject?.accessToken) {
           console.warn(
@@ -664,7 +664,7 @@ export async function updateBountyComments(id: string): Promise<void> {
         }
         break;
       }
-      case "GITHUB":
+      case Platform.GITHUB:
       default: {
         const installationId = bounty.installationId ?? undefined;
 
