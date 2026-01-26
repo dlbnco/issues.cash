@@ -16,14 +16,13 @@ import type { Network } from "cashscript";
 import {
   postIssueComment,
   updateIssueComment,
-  createOrUpdateComment,
   getRepoBchNetwork,
 } from "./github/api";
 import {
   postIssueNote,
   updateIssueNote,
-  createOrUpdateIssueNote,
-  createOrUpdateMergeRequestNote,
+  postMergeRequestNote,
+  updateMergeRequestNote,
 } from "./gitlab/api";
 import {
   bountyCompletedMessage,
@@ -642,17 +641,26 @@ export async function updateBountyComments(id: string): Promise<void> {
 
         // Post/update issue comment
         if (issueMessage) {
-          const newCommentId = await createOrUpdateIssueNote(
-            gitlabProject.instanceUrl,
-            gitlabProject.projectId,
-            bounty.issueNumber,
-            issueMessage,
-            bounty.commentId,
-            gitlabProject.accessToken
-          );
-
-          if (!bounty.commentId && newCommentId) {
-            await updateBountyCommentId(bounty.id, newCommentId);
+          if (bounty.commentId) {
+            await updateIssueNote(
+              gitlabProject.instanceUrl,
+              gitlabProject.projectId,
+              bounty.issueNumber,
+              bounty.commentId,
+              issueMessage,
+              gitlabProject.accessToken
+            );
+          } else {
+            const newCommentId = await postIssueNote(
+              gitlabProject.instanceUrl,
+              gitlabProject.projectId,
+              bounty.issueNumber,
+              issueMessage,
+              gitlabProject.accessToken
+            );
+            if (newCommentId) {
+              await updateBountyCommentId(bounty.id, newCommentId);
+            }
           }
         }
 
@@ -701,20 +709,29 @@ export async function updateBountyComments(id: string): Promise<void> {
                 break;
             }
 
-            const newAttemptCommentId = await createOrUpdateMergeRequestNote(
-              gitlabProject.instanceUrl,
-              gitlabProject.projectId,
-              attempt.prNumber,
-              prMessage,
-              attempt.commentId,
-              gitlabProject.accessToken
-            );
-
-            if (!attempt.commentId && newAttemptCommentId) {
-              await prisma.attempt.update({
-                where: { id: attempt.id },
-                data: { commentId: newAttemptCommentId },
-              });
+            if (attempt.commentId) {
+              await updateMergeRequestNote(
+                gitlabProject.instanceUrl,
+                gitlabProject.projectId,
+                attempt.prNumber,
+                attempt.commentId,
+                prMessage,
+                gitlabProject.accessToken
+              );
+            } else {
+              const newAttemptCommentId = await postMergeRequestNote(
+                gitlabProject.instanceUrl,
+                gitlabProject.projectId,
+                attempt.prNumber,
+                prMessage,
+                gitlabProject.accessToken
+              );
+              if (newAttemptCommentId) {
+                await prisma.attempt.update({
+                  where: { id: attempt.id },
+                  data: { commentId: newAttemptCommentId },
+                });
+              }
             }
           } catch (error) {
             console.error(
@@ -734,17 +751,25 @@ export async function updateBountyComments(id: string): Promise<void> {
         }
 
         if (issueMessage) {
-          const bountyNewCommentId = await createOrUpdateComment(
-            owner,
-            repo,
-            bounty.issueNumber,
-            issueMessage,
-            bounty.commentId,
-            installationId,
-          );
-
-          if (!bounty.commentId && bountyNewCommentId) {
-            await updateBountyCommentId(bounty.id, bountyNewCommentId);
+          if (bounty.commentId) {
+            await updateIssueComment(
+              owner,
+              repo,
+              bounty.commentId,
+              issueMessage,
+              installationId,
+            );
+          } else {
+            const bountyNewCommentId = await postIssueComment(
+              owner,
+              repo,
+              bounty.issueNumber,
+              issueMessage,
+              installationId,
+            );
+            if (bountyNewCommentId) {
+              await updateBountyCommentId(bounty.id, bountyNewCommentId);
+            }
           }
         }
 
@@ -793,20 +818,28 @@ export async function updateBountyComments(id: string): Promise<void> {
                 break;
             }
 
-            const attemptNewCommentId = await createOrUpdateComment(
-              owner,
-              repo,
-              attempt.prNumber,
-              prMessage,
-              attempt.commentId,
-              installationId,
-            );
-
-            if (!attempt.commentId && attemptNewCommentId) {
-              await prisma.attempt.update({
-                where: { id: attempt.id },
-                data: { commentId: attemptNewCommentId },
-              });
+            if (attempt.commentId) {
+              await updateIssueComment(
+                owner,
+                repo,
+                attempt.commentId,
+                prMessage,
+                installationId,
+              );
+            } else {
+              const attemptNewCommentId = await postIssueComment(
+                owner,
+                repo,
+                attempt.prNumber,
+                prMessage,
+                installationId,
+              );
+              if (attemptNewCommentId) {
+                await prisma.attempt.update({
+                  where: { id: attempt.id },
+                  data: { commentId: attemptNewCommentId },
+                });
+              }
             }
           } catch (error) {
             console.error(

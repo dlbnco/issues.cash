@@ -7,7 +7,6 @@ import {
   postIssueComment,
   parseRepoFullName,
   updateIssueComment,
-  createOrUpdateComment,
   getRepoBchNetwork,
 } from "@/lib/github/api";
 import * as messages from "@/lib/messages";
@@ -90,14 +89,23 @@ export async function handleIssueClosed(
         network,
       });
 
-      await createOrUpdateComment(
-        owner,
-        repo,
-        issue.number,
-        message,
-        bounty.commentId,
-        installationId,
-      );
+      if (bounty.commentId) {
+        await updateIssueComment(
+          owner,
+          repo,
+          bounty.commentId,
+          message,
+          installationId,
+        );
+      } else {
+        await postIssueComment(
+          owner,
+          repo,
+          issue.number,
+          message,
+          installationId,
+        );
+      }
 
       return {
         success: true,
