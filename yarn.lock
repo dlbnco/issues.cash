@@ -4430,6 +4430,13 @@ __metadata:
   languageName: node
   linkType: hard
 
+"gitlab-event-types@npm:^3.0.1":
+  version: 3.0.1
+  resolution: "gitlab-event-types@npm:3.0.1"
+  checksum: 10c0/b0eb456f9fabaaf4f7c1a54fa67d0e6c01c650f0d38821051b73f55f5723183edf47dc92a8bd1ff0d091e53260d6fd5b46418e77ebd151ee7764ad4bee6dbfd8
+  languageName: node
+  linkType: hard
+
 "glob-parent@npm:^5.1.2":
   version: 5.1.2
   resolution: "glob-parent@npm:5.1.2"
@@ -5066,6 +5073,7 @@ __metadata:
     daisyui: "npm:^5.5.14"
     eslint: "npm:^9"
     eslint-config-next: "npm:16.0.0"
+    gitlab-event-types: "npm:^3.0.1"
     jest: "npm:^30.2.0"
     next: "npm:16.0.10"
     octokit: "npm:^5.0.5"
