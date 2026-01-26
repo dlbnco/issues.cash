@@ -9,7 +9,8 @@ import type { GitLabIssueEvent } from "../types";
 import { prisma } from "@/lib/prisma";
 import { refundBountyToMaintainer } from "@/lib/bounty";
 import {
-  createOrUpdateIssueNote,
+  postIssueNote,
+  updateIssueNote,
   constructIssueUrl,
   extractInstanceUrl,
   getProjectBchNetwork,
@@ -65,14 +66,24 @@ export async function handleIssueClosed(
   if (hasPendingAttempts) {
     // Post error message about pending attempts
     if (credentials.accessToken) {
-      await createOrUpdateIssueNote(
-        instanceUrl,
-        project.id,
-        issue.iid,
-        messages.errorRefundPendingAttemptsFound(bounty.attempts),
-        bounty.commentId,
-        credentials.accessToken
-      );
+      if (bounty.commentId) {
+        await updateIssueNote(
+          instanceUrl,
+          project.id,
+          issue.iid,
+          bounty.commentId,
+          messages.errorRefundPendingAttemptsFound(bounty.attempts),
+          credentials.accessToken
+        );
+      } else {
+        await postIssueNote(
+          instanceUrl,
+          project.id,
+          issue.iid,
+          messages.errorRefundPendingAttemptsFound(bounty.attempts),
+          credentials.accessToken
+        );
+      }
     }
 
     return {
@@ -108,14 +119,24 @@ export async function handleIssueClosed(
         network,
       });
 
-      await createOrUpdateIssueNote(
-        instanceUrl,
-        project.id,
-        issue.iid,
-        message,
-        bounty.commentId,
-        credentials.accessToken
-      );
+      if (bounty.commentId) {
+        await updateIssueNote(
+          instanceUrl,
+          project.id,
+          issue.iid,
+          bounty.commentId,
+          message,
+          credentials.accessToken
+        );
+      } else {
+        await postIssueNote(
+          instanceUrl,
+          project.id,
+          issue.iid,
+          message,
+          credentials.accessToken
+        );
+      }
     }
 
     return {

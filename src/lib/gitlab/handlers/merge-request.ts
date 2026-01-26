@@ -17,7 +17,7 @@ import { createOrUpdateAttempt } from "@/lib/attempt";
 import { parseClaimCommand, validateAddressForNetwork } from "@/lib/commands";
 import {
   postMergeRequestNote,
-  createOrUpdateMergeRequestNote,
+  updateMergeRequestNote,
   parsePathWithNamespace,
   constructMergeRequestUrl,
   extractInstanceUrl,
@@ -299,22 +299,34 @@ async function handleMergeRequestMerged(
 
     // Post completion message
     if (credentials.accessToken) {
-      await createOrUpdateMergeRequestNote(
-        instanceUrl,
-        project.id,
-        mrNumber,
-        messages.bountyCompletedMessage({
-          issueNumber: bounty.issueNumber,
-          amount,
-          contributorLogin: attempt.contributorLogin,
-          contributorAddress: attempt.contributorAddress,
-          prNumber: mrNumber,
-          txId: result.txid,
-          network,
-        }),
-        attempt.commentId,
-        credentials.accessToken
-      );
+      const completionMessage = messages.bountyCompletedMessage({
+        issueNumber: bounty.issueNumber,
+        amount,
+        contributorLogin: attempt.contributorLogin,
+        contributorAddress: attempt.contributorAddress,
+        prNumber: mrNumber,
+        txId: result.txid,
+        network,
+      });
+
+      if (attempt.commentId) {
+        await updateMergeRequestNote(
+          instanceUrl,
+          project.id,
+          mrNumber,
+          attempt.commentId,
+          completionMessage,
+          credentials.accessToken
+        );
+      } else {
+        await postMergeRequestNote(
+          instanceUrl,
+          project.id,
+          mrNumber,
+          completionMessage,
+          credentials.accessToken
+        );
+      }
     }
 
     return {
@@ -369,16 +381,28 @@ async function handleMergeRequestClosed(
 
   // Post rejection message
   if (credentials.accessToken) {
-    await createOrUpdateMergeRequestNote(
-      instanceUrl,
-      project.id,
-      mrNumber,
-      messages.claimRejectedMessage({
-        issueNumber: attempt.bounty.issueNumber,
-      }),
-      attempt.commentId,
-      credentials.accessToken
-    );
+    const rejectionMessage = messages.claimRejectedMessage({
+      issueNumber: attempt.bounty.issueNumber,
+    });
+
+    if (attempt.commentId) {
+      await updateMergeRequestNote(
+        instanceUrl,
+        project.id,
+        mrNumber,
+        attempt.commentId,
+        rejectionMessage,
+        credentials.accessToken
+      );
+    } else {
+      await postMergeRequestNote(
+        instanceUrl,
+        project.id,
+        mrNumber,
+        rejectionMessage,
+        credentials.accessToken
+      );
+    }
   }
 
   return {

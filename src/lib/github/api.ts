@@ -199,40 +199,6 @@ export async function addIssueLabel(
 }
 
 /**
- * Create or update a comment on an issue/PR
- * If the app already has a comment, it updates it; otherwise creates a new one
- */
-export async function createOrUpdateComment(
-  owner: string,
-  repo: string,
-  issueNumber: number,
-  body: string,
-  commentId?: bigint | null,
-  installationId?: number,
-): Promise<bigint | number | undefined> {
-  if (commentId) {
-    // Update existing comment
-    const success = await updateIssueComment(
-      owner,
-      repo,
-      commentId,
-      body,
-      installationId,
-    );
-    return success ? commentId : undefined;
-  } else {
-    // Create new comment
-    return await postIssueComment(
-      owner,
-      repo,
-      issueNumber,
-      body,
-      installationId,
-    );
-  }
-}
-
-/**
  * Delete an issue comment
  */
 export async function deleteIssueComment(
