@@ -10,6 +10,7 @@ import {
 import { parseCommand, validateAddressForNetwork } from "@/lib/commands";
 import {
   postIssueComment,
+  deleteIssueComment,
   parseRepoFullName,
   getRepoBchNetwork,
 } from "@/lib/github/api";
@@ -96,15 +97,17 @@ export async function handleIssueComment(
     authorAssociation === "OWNER" ||
     authorAssociation === "MEMBER" ||
     authorAssociation === "COLLABORATOR";
+  const installationId =
+    "installation" in payload ? payload.installation?.id : undefined;
 
-  // Only allow repo maintainers to create bounties
+  // Only allow repo maintainers to create/cancel bounties
   if (!isMaintainer) {
     await postIssueComment(
       owner,
       repo,
       issueNumber,
       messages.unauthorizedError(authorAssociation),
-      "installation" in payload ? payload.installation?.id : undefined,
+      installationId,
     );
 
     return {
@@ -113,13 +116,25 @@ export async function handleIssueComment(
     };
   }
 
+  // Handle cancel command
+  if (command.type === "cancel") {
+    return handleCancelCommand(
+      owner,
+      repo,
+      issueUrl,
+      issueNumber,
+      comment.user.login,
+      installationId,
+    );
+  }
+
   if (issue.state === "closed") {
     await postIssueComment(
       owner,
       repo,
       issueNumber,
       messages.issueClosedError(),
-      "installation" in payload ? payload.installation?.id : undefined,
+      installationId,
     );
 
     return {
@@ -148,7 +163,7 @@ export async function handleIssueComment(
         existingBounty.status,
         existingBounty.amount,
       ),
-      "installation" in payload ? payload.installation?.id : undefined,
+      installationId,
     );
 
     return {
@@ -159,9 +174,6 @@ export async function handleIssueComment(
 
   // Create the bounty
   try {
-    const installationId =
-      "installation" in payload ? payload.installation?.id : undefined;
-
     if (installationId == null) {
       throw new Error("Installation ID is not defined");
     }
@@ -253,4 +265,82 @@ export async function handleIssueComment(
       error: (error as Error).message,
     };
   }
+}
+
+/**
+ * Handle /bounty cancel command
+ * Deletes a pending (unfunded) bounty and its associated bot comment
+ */
+async function handleCancelCommand(
+  owner: string,
+  repo: string,
+  issueUrl: string,
+  issueNumber: number,
+  username: string,
+  installationId?: number,
+): Promise<WebhookResponse> {
+  // Find existing bounty for this issue
+  const bounty = await prisma.bounty.findFirst({
+    where: {
+      issueUrl,
+      status: {
+        notIn: [BountyStatus.REFUNDED, BountyStatus.EXPIRED],
+      },
+    },
+  });
+
+  if (!bounty) {
+    await postIssueComment(
+      owner,
+      repo,
+      issueNumber,
+      messages.noPendingBountyError(),
+      installationId,
+    );
+
+    return {
+      success: false,
+      error: "No pending bounty to cancel",
+    };
+  }
+
+  // Check if bounty is already funded
+  if (bounty.status !== BountyStatus.PENDING_FUNDING) {
+    await postIssueComment(
+      owner,
+      repo,
+      issueNumber,
+      messages.bountyAlreadyFundedError(),
+      installationId,
+    );
+
+    return {
+      success: false,
+      error: "Cannot cancel: bounty is already funded",
+    };
+  }
+
+  // Delete the bot's bounty comment if it exists
+  if (bounty.commentId) {
+    await deleteIssueComment(owner, repo, bounty.commentId, installationId);
+  }
+
+  // Delete the bounty from database
+  await prisma.bounty.delete({
+    where: { id: bounty.id },
+  });
+
+  // Post confirmation message
+  await postIssueComment(
+    owner,
+    repo,
+    issueNumber,
+    messages.bountyCancelledMessage(username),
+    installationId,
+  );
+
+  return {
+    success: true,
+    message: "Bounty cancelled",
+  };
 }

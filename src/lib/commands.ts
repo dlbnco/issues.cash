@@ -1,7 +1,10 @@
 import { decodeCashAddress } from "@bitauth/libauth";
 
+export type CommandType = "create" | "cancel";
+
 export interface ParsedCommand {
   success: boolean;
+  type?: CommandType;
   amount?: number; // BCH amount
   refundAddress?: string;
   expiryDays?: number;
@@ -39,6 +42,14 @@ export function parseCommand(command: string): ParsedCommand {
 
   // Remove the /bounty part
   tokens.shift();
+
+  // Check for cancel command
+  if (tokens.length >= 1 && tokens[0].toLowerCase() === "cancel") {
+    return {
+      success: true,
+      type: "cancel",
+    };
+  }
 
   // Extract amount (first argument)
   if (tokens.length < 1) {
@@ -139,6 +150,7 @@ export function parseCommand(command: string): ParsedCommand {
 
   return {
     success: true,
+    type: "create",
     amount,
     refundAddress,
     expiryDays,

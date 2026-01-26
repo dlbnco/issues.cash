@@ -199,36 +199,35 @@ export async function addIssueLabel(
 }
 
 /**
- * Create or update a comment on an issue/PR
- * If the app already has a comment, it updates it; otherwise creates a new one
+ * Delete an issue comment
  */
-export async function createOrUpdateComment(
+export async function deleteIssueComment(
   owner: string,
   repo: string,
-  issueNumber: number,
-  body: string,
-  commentId?: bigint | null,
+  commentId: bigint,
   installationId?: number,
-): Promise<bigint | number | undefined> {
-  if (commentId) {
-    // Update existing comment
-    const success = await updateIssueComment(
+): Promise<boolean> {
+  const octokit = getOctokit(installationId);
+
+  if (!octokit) {
+    console.error(
+      "Cannot delete comment: GitHub authentication not configured",
+    );
+    return false;
+  }
+
+  try {
+    await octokit.rest.issues.deleteComment({
       owner,
       repo,
-      commentId,
-      body,
-      installationId,
-    );
-    return success ? commentId : undefined;
-  } else {
-    // Create new comment
-    return await postIssueComment(
-      owner,
-      repo,
-      issueNumber,
-      body,
-      installationId,
-    );
+      comment_id: Number(commentId),
+    });
+
+    console.log(`✅ Deleted comment ${commentId} in ${owner}/${repo}`);
+    return true;
+  } catch (error) {
+    console.error("Failed to delete GitHub comment:", error);
+    return false;
   }
 }
 

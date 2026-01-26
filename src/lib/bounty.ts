@@ -15,16 +15,21 @@ import type { Network } from "cashscript";
 import {
   postIssueComment,
   updateIssueComment,
-  createOrUpdateComment,
   getRepoBchNetwork,
 } from "./github/api";
+import {
+  postIssueNote,
+  updateIssueNote,
+  postMergeRequestNote,
+  updateMergeRequestNote,
+} from "./gitlab/api";
 import {
   bountyCompletedMessage,
   bountyFundedMessage,
   claimRegisteredMessage,
   claimRejectedMessage,
 } from "./messages";
-import { AttemptStatus, BCHNetwork, BountyStatus } from "@prisma/client";
+import { AttemptStatus, BCHNetwork, BountyStatus, Platform } from "@prisma/client";
 import { UNLOCKING_TX_FEE_AMOUNT } from "./constants";
 import {
   fromElectrumToPrismaNetwork,
@@ -41,7 +46,11 @@ export interface CreateBountyParams {
   refundAddress: string;
   expiryDays?: number;
   network?: Network;
+  // GitHub-specific
   installationId?: number;
+  // GitLab-specific
+  platform?: Platform;
+  gitlabProjectId?: string;
 }
 
 export interface BountyInfo {
@@ -74,6 +83,8 @@ export async function createBountyFromCommand(
     expiryDays = 90,
     network,
     installationId,
+    platform = "GITHUB",
+    gitlabProjectId,
   } = params;
 
   // Validate network
@@ -125,6 +136,8 @@ export async function createBountyFromCommand(
       status: "PENDING_FUNDING",
       installationId,
       network: fromElectrumToPrismaNetwork(network),
+      platform,
+      gitlabProjectId,
     },
   });
 
@@ -220,28 +233,77 @@ export async function checkPendingBounties(): Promise<{
 
         const message = bountyFundedMessage({
           amount: bounty.amount,
-          fundedAmount: bounty.fundedAmount,
+          fundedAmount: balance.confirmed,
           contractAddress: bounty.contractAddress,
           expiryDate: bounty.locktime,
           issueNumber: bounty.issueNumber,
         });
 
-        if (bounty.commentId == null) {
-          await postIssueComment(
-            bounty.repoOwner,
-            bounty.repoName,
-            bounty.issueNumber,
-            message,
-            bounty.installationId ?? undefined,
-          );
-        } else {
-          await updateIssueComment(
-            bounty.repoOwner,
-            bounty.repoName,
-            bounty.commentId,
-            message,
-            bounty.installationId ?? undefined,
-          );
+        let newCommentId: number | bigint | undefined;
+
+        switch (bounty.platform) {
+          case Platform.GITLAB: {
+            if (!bounty.gitlabProjectId) break;
+
+            const gitlabProject = await prisma.gitLabProject.findUnique({
+              where: { id: bounty.gitlabProjectId },
+            });
+
+            if (gitlabProject?.accessToken) {
+              if (bounty.commentId == null) {
+                newCommentId = await postIssueNote(
+                  gitlabProject.instanceUrl,
+                  gitlabProject.projectId,
+                  bounty.issueNumber,
+                  message,
+                  gitlabProject.accessToken
+                );
+              } else {
+                await updateIssueNote(
+                  gitlabProject.instanceUrl,
+                  gitlabProject.projectId,
+                  bounty.issueNumber,
+                  bounty.commentId,
+                  message,
+                  gitlabProject.accessToken
+                );
+              }
+            } else {
+              console.warn(
+                `⚠️ No access token for GitLab project ${bounty.gitlabProjectId}`
+              );
+            }
+            break;
+          }
+          case Platform.GITHUB:
+          default: {
+            if (bounty.commentId == null) {
+              newCommentId = await postIssueComment(
+                bounty.repoOwner,
+                bounty.repoName,
+                bounty.issueNumber,
+                message,
+                bounty.installationId ?? undefined,
+              );
+            } else {
+              await updateIssueComment(
+                bounty.repoOwner,
+                bounty.repoName,
+                bounty.commentId,
+                message,
+                bounty.installationId ?? undefined,
+              );
+            }
+            break;
+          }
+        }
+
+        // Update commentId if we created a new comment
+        if (newCommentId && !bounty.commentId) {
+          await prisma.bounty.update({
+            where: { id: bounty.id },
+            data: { commentId: newCommentId },
+          });
         }
 
         fundedCount++;
@@ -477,17 +539,12 @@ export async function processExpiredBounties(
 export async function updateBountyComments(id: string): Promise<void> {
   const bounty = await prisma.bounty.findUnique({
     where: { id },
-    include: { attempts: true },
+    include: { attempts: true, gitlabProject: true },
   });
   if (bounty == null) {
     throw new Error("Bounty not found");
   }
   const { repoOwner: owner, repoName: repo } = bounty;
-  const installationId = bounty.installationId ?? undefined;
-
-  if (installationId == null) {
-    throw new Error("Installation ID is required");
-  }
 
   try {
     let issueMessage: string | undefined = undefined;
@@ -502,6 +559,7 @@ export async function updateBountyComments(id: string): Promise<void> {
           issueNumber: bounty.issueNumber,
           attempts: bounty.attempts,
         });
+        break;
       case "CLAIMED":
         const winningAttempt = bounty.attempts.find(
           (a) => a.status === AttemptStatus.APPROVED,
@@ -517,79 +575,206 @@ export async function updateBountyComments(id: string): Promise<void> {
           prNumber: winningAttempt.prNumber,
           txId: winningAttempt.settlementTxId,
         });
+        break;
     }
 
-    if (issueMessage) {
-      const bountyNewCommentId = await createOrUpdateComment(
-        owner,
-        repo,
-        bounty.issueNumber,
-        issueMessage,
-        bounty.commentId,
-        installationId,
-      );
+    const network = fromPrismaToElectrumNetwork(bounty.network);
 
-      if (!bounty.commentId && bountyNewCommentId) {
-        await updateBountyCommentId(bounty.id, bountyNewCommentId);
+    // Platform-specific comment posting
+    switch (bounty.platform) {
+      case Platform.GITLAB: {
+        const { gitlabProject } = bounty;
+        if (!gitlabProject?.accessToken) {
+          console.warn(
+            `⚠️ No access token for GitLab project ${bounty.gitlabProjectId}`
+          );
+          return;
+        }
+
+        // Post/update issue comment
+        if (issueMessage) {
+          if (bounty.commentId) {
+            await updateIssueNote(
+              gitlabProject.instanceUrl,
+              gitlabProject.projectId,
+              bounty.issueNumber,
+              bounty.commentId,
+              issueMessage,
+              gitlabProject.accessToken
+            );
+          } else {
+            const newCommentId = await postIssueNote(
+              gitlabProject.instanceUrl,
+              gitlabProject.projectId,
+              bounty.issueNumber,
+              issueMessage,
+              gitlabProject.accessToken
+            );
+            if (newCommentId) {
+              await updateBountyCommentId(bounty.id, newCommentId);
+            }
+          }
+        }
+
+        // Update MR comments for attempts
+        for (const attempt of bounty.attempts) {
+          try {
+            let prMessage: string;
+
+            switch (attempt.status) {
+              case "PENDING":
+                prMessage = claimRegisteredMessage({
+                  issueNumber: bounty.issueNumber,
+                  amount: bounty.fundedAmount ?? bounty.amount,
+                  contributorAddress: attempt.contributorAddress,
+                  contractAddress: bounty.contractAddress,
+                });
+                break;
+              case "APPROVED":
+                prMessage = bountyCompletedMessage({
+                  issueNumber: bounty.issueNumber,
+                  amount: bounty.fundedAmount ?? bounty.amount,
+                  contributorAddress: attempt.contributorAddress,
+                  contributorLogin: attempt.contributorLogin,
+                  prNumber: attempt.prNumber,
+                  txId: attempt.settlementTxId ?? "",
+                  network,
+                });
+                break;
+              case "REJECTED":
+                prMessage = claimRejectedMessage({
+                  issueNumber: bounty.issueNumber,
+                });
+                break;
+            }
+
+            if (attempt.commentId) {
+              await updateMergeRequestNote(
+                gitlabProject.instanceUrl,
+                gitlabProject.projectId,
+                attempt.prNumber,
+                attempt.commentId,
+                prMessage,
+                gitlabProject.accessToken
+              );
+            } else {
+              const newAttemptCommentId = await postMergeRequestNote(
+                gitlabProject.instanceUrl,
+                gitlabProject.projectId,
+                attempt.prNumber,
+                prMessage,
+                gitlabProject.accessToken
+              );
+              if (newAttemptCommentId) {
+                await prisma.attempt.update({
+                  where: { id: attempt.id },
+                  data: { commentId: newAttemptCommentId },
+                });
+              }
+            }
+          } catch (error) {
+            console.error(
+              `Error updating MR !${attempt.prNumber} comment:`,
+              error
+            );
+          }
+        }
+        break;
       }
-    }
+      case Platform.GITHUB:
+      default: {
+        const installationId = bounty.installationId ?? undefined;
 
-    const network = await getRepoBchNetwork(owner, repo, installationId);
-
-    // 2. Update each PR with its individual attempt status
-    for (const attempt of bounty.attempts) {
-      try {
-        let prMessage: string;
-
-        switch (attempt.status) {
-          case "PENDING":
-            prMessage = claimRegisteredMessage({
-              issueNumber: bounty.issueNumber,
-              amount: bounty.fundedAmount ?? bounty.amount,
-              contributorAddress: attempt.contributorAddress,
-              contractAddress: bounty.contractAddress,
-            });
-            break;
-          case "APPROVED":
-            prMessage = bountyCompletedMessage({
-              issueNumber: bounty.issueNumber,
-              amount: bounty.fundedAmount ?? bounty.amount,
-              contributorAddress: attempt.contributorAddress,
-              contributorLogin: attempt.contributorLogin,
-              prNumber: attempt.prNumber,
-              txId: attempt.settlementTxId ?? "",
-              network,
-            });
-            break;
-
-          case "REJECTED":
-            prMessage = claimRejectedMessage({
-              issueNumber: bounty.issueNumber,
-            });
-            break;
+        if (installationId == null) {
+          throw new Error("Installation ID is required for GitHub bounties");
         }
 
-        const attemptNewCommentId = await createOrUpdateComment(
-          owner,
-          repo,
-          attempt.prNumber,
-          prMessage,
-          attempt.commentId,
-          installationId,
-        );
-
-        if (!attempt.commentId) {
-          await prisma.attempt.update({
-            where: {
-              id: attempt.id,
-            },
-            data: {
-              commentId: attemptNewCommentId,
-            },
-          });
+        if (issueMessage) {
+          if (bounty.commentId) {
+            await updateIssueComment(
+              owner,
+              repo,
+              bounty.commentId,
+              issueMessage,
+              installationId,
+            );
+          } else {
+            const bountyNewCommentId = await postIssueComment(
+              owner,
+              repo,
+              bounty.issueNumber,
+              issueMessage,
+              installationId,
+            );
+            if (bountyNewCommentId) {
+              await updateBountyCommentId(bounty.id, bountyNewCommentId);
+            }
+          }
         }
-      } catch (error) {
-        console.error(`Error updating PR #${attempt.prNumber} comment:`, error);
+
+        // Update each PR with its individual attempt status
+        for (const attempt of bounty.attempts) {
+          try {
+            let prMessage: string;
+
+            switch (attempt.status) {
+              case "PENDING":
+                prMessage = claimRegisteredMessage({
+                  issueNumber: bounty.issueNumber,
+                  amount: bounty.fundedAmount ?? bounty.amount,
+                  contributorAddress: attempt.contributorAddress,
+                  contractAddress: bounty.contractAddress,
+                });
+                break;
+              case "APPROVED":
+                prMessage = bountyCompletedMessage({
+                  issueNumber: bounty.issueNumber,
+                  amount: bounty.fundedAmount ?? bounty.amount,
+                  contributorAddress: attempt.contributorAddress,
+                  contributorLogin: attempt.contributorLogin,
+                  prNumber: attempt.prNumber,
+                  txId: attempt.settlementTxId ?? "",
+                  network,
+                });
+                break;
+              case "REJECTED":
+                prMessage = claimRejectedMessage({
+                  issueNumber: bounty.issueNumber,
+                });
+                break;
+            }
+
+            if (attempt.commentId) {
+              await updateIssueComment(
+                owner,
+                repo,
+                attempt.commentId,
+                prMessage,
+                installationId,
+              );
+            } else {
+              const attemptNewCommentId = await postIssueComment(
+                owner,
+                repo,
+                attempt.prNumber,
+                prMessage,
+                installationId,
+              );
+              if (attemptNewCommentId) {
+                await prisma.attempt.update({
+                  where: { id: attempt.id },
+                  data: { commentId: attemptNewCommentId },
+                });
+              }
+            }
+          } catch (error) {
+            console.error(
+              `Error updating PR #${attempt.prNumber} comment:`,
+              error
+            );
+          }
+        }
+        break;
       }
     }
 
