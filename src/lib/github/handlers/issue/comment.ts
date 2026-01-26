@@ -7,7 +7,7 @@ import {
   createBountyFromCommand,
   getMostRecentBountyByIssueNumber,
 } from "@/lib/bounty";
-import { parseCommand, validateAddressForNetwork } from "@/lib/commands";
+import { parseCommand, validateAddressForNetwork, validateBountyAmount } from "@/lib/commands";
 import {
   postIssueComment,
   deleteIssueComment,
@@ -201,6 +201,23 @@ export async function handleIssueComment(
       return {
         success: false,
         error: addressValidation.error,
+      };
+    }
+
+    // Validate bounty amount for the specific network
+    const amountValidation = validateBountyAmount(command.amount!, network);
+    if (!amountValidation.valid) {
+      await postIssueComment(
+        owner,
+        repo,
+        issueNumber,
+        messages.invalidCommandError(amountValidation.error!),
+        installationId
+      );
+
+      return {
+        success: false,
+        error: amountValidation.error,
       };
     }
 

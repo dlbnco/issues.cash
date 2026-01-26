@@ -7,6 +7,7 @@ import {
   completeBounty,
   refundBounty,
   timeoutBounty,
+  getOracleFeePKH,
   type TransactionResult,
 } from "@/lib/contract";
 import { bchToSats } from "@/lib/commands";
@@ -32,6 +33,7 @@ import {
 } from "./messages";
 import { AttemptStatus, BCHNetwork, BountyStatus, Platform } from "@prisma/client";
 import { UNLOCKING_TX_FEE_AMOUNT } from "./constants";
+import { calculateCommission, type CommissionResult } from "./commission";
 import {
   fromElectrumToPrismaNetwork,
   fromPrismaToElectrumNetwork,
@@ -366,32 +368,57 @@ function setupContractFromBounty(bounty: Bounty, network: Network) {
   return { config, contract };
 }
 
+export interface CompleteBountyResult {
+  transaction: TransactionResult;
+  commission: CommissionResult;
+}
+
 /**
  * Complete a bounty - pay the contributor after PR is merged
  *
  * @param bounty - The Bounty record from the database
  * @param contributorAddress - BCH address of the contributor to pay
  * @param network - Network to use (mainnet or testnet3)
- * @returns Transaction result with txid and hex
+ * @returns Transaction result with txid and commission info
  */
 export async function completeBountyPayout(
   bounty: Bounty,
   contributorAddress: string,
   network: Network,
-): Promise<TransactionResult> {
+): Promise<CompleteBountyResult> {
   if (bounty.status !== "ACTIVE") {
     throw new Error(`Cannot complete bounty with status: ${bounty.status}`);
   }
 
   const { config, contract } = setupContractFromBounty(bounty, network);
 
+  const fundedAmount = bounty.fundedAmount ?? bounty.amount;
+  const txFee = bounty.feeAmount ?? BigInt(0);
+
+  // Calculate commission
+  const commission = calculateCommission(
+    fundedAmount,
+    txFee,
+    bounty.platform,
+    bounty.repoOwner,
+    bounty.repoName
+  );
+
+  // Get oracle fee PKH if commission applies
+  const oracleFeePKH =
+    commission.commissionAmount > BigInt(0)
+      ? getOracleFeePKH(config.oracleKeys)
+      : null;
+
   const result = await completeBounty(
     contract,
     config.provider,
     contributorAddress,
+    commission.contributorAmount,
     bounty.issueHash,
-    (bounty.fundedAmount ?? bounty.amount) - (bounty.feeAmount ?? BigInt(0)),
     config.oracleKeys.privateKey,
+    oracleFeePKH,
+    commission.commissionAmount,
   );
 
   // Update bounty status
@@ -405,9 +432,16 @@ export async function completeBountyPayout(
   console.log(
     `✅ Bounty ${bounty.id} completed, paid to ${contributorAddress}`,
   );
+  console.log(`   Contributor amount: ${commission.contributorAmount} sats`);
+  if (commission.commissionAmount > BigInt(0)) {
+    console.log(`   Commission: ${commission.commissionAmount} sats (${commission.commissionBps / 100}%)`);
+  }
   console.log(`   TX: ${result.txid}`);
 
-  return result;
+  return {
+    transaction: result,
+    commission,
+  };
 }
 
 /**
@@ -567,8 +601,22 @@ export async function updateBountyComments(id: string): Promise<void> {
         );
         if (winningAttempt == null || winningAttempt.settlementTxId == null)
           return;
+        
+        // Calculate commission for display
+        const claimedCommission = calculateCommission(
+          bounty.fundedAmount ?? bounty.amount,
+          bounty.feeAmount ?? BigInt(0),
+          bounty.platform,
+          bounty.repoOwner,
+          bounty.repoName,
+        );
+        
         issueMessage = bountyCompletedMessage({
-          amount: bounty.fundedAmount ?? bounty.amount,
+          fundedAmount: bounty.fundedAmount ?? bounty.amount,
+          contributorAmount: claimedCommission.contributorAmount,
+          commissionAmount: claimedCommission.commissionAmount,
+          commissionBps: claimedCommission.commissionBps,
+          isZeroCommissionProject: claimedCommission.isZeroCommissionProject,
           contributorAddress: winningAttempt?.contributorAddress,
           contributorLogin: winningAttempt?.contributorLogin,
           issueNumber: bounty.issueNumber,
@@ -623,9 +671,22 @@ export async function updateBountyComments(id: string): Promise<void> {
                 });
                 break;
               case "APPROVED":
+                // Calculate commission for display on MR
+                const mrCommission = calculateCommission(
+                  bounty.fundedAmount ?? bounty.amount,
+                  bounty.feeAmount ?? BigInt(0),
+                  bounty.platform,
+                  bounty.repoOwner,
+                  bounty.repoName,
+                );
+                
                 prMessage = bountyCompletedMessage({
                   issueNumber: bounty.issueNumber,
-                  amount: bounty.fundedAmount ?? bounty.amount,
+                  fundedAmount: bounty.fundedAmount ?? bounty.amount,
+                  contributorAmount: mrCommission.contributorAmount,
+                  commissionAmount: mrCommission.commissionAmount,
+                  commissionBps: mrCommission.commissionBps,
+                  isZeroCommissionProject: mrCommission.isZeroCommissionProject,
                   contributorAddress: attempt.contributorAddress,
                   contributorLogin: attempt.contributorLogin,
                   prNumber: attempt.prNumber,
@@ -702,9 +763,22 @@ export async function updateBountyComments(id: string): Promise<void> {
                 });
                 break;
               case "APPROVED":
+                // Calculate commission for display on PR
+                const prCommission = calculateCommission(
+                  bounty.fundedAmount ?? bounty.amount,
+                  bounty.feeAmount ?? BigInt(0),
+                  bounty.platform,
+                  bounty.repoOwner,
+                  bounty.repoName,
+                );
+                
                 prMessage = bountyCompletedMessage({
                   issueNumber: bounty.issueNumber,
-                  amount: bounty.fundedAmount ?? bounty.amount,
+                  fundedAmount: bounty.fundedAmount ?? bounty.amount,
+                  contributorAmount: prCommission.contributorAmount,
+                  commissionAmount: prCommission.commissionAmount,
+                  commissionBps: prCommission.commissionBps,
+                  isZeroCommissionProject: prCommission.isZeroCommissionProject,
                   contributorAddress: attempt.contributorAddress,
                   contributorLogin: attempt.contributorLogin,
                   prNumber: attempt.prNumber,

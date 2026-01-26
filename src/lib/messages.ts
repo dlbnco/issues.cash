@@ -315,7 +315,16 @@ ${CREDITS}`;
 
 export interface BountyCompletedParams {
   issueNumber: number;
-  amount: number | bigint;
+  /** Total funded amount (bounty amount) */
+  fundedAmount: number | bigint;
+  /** Amount the contributor receives after commission */
+  contributorAmount: number | bigint;
+  /** Commission amount in satoshis */
+  commissionAmount: number | bigint;
+  /** Commission rate in basis points */
+  commissionBps: number;
+  /** Whether this is a founding partner project */
+  isZeroCommissionProject: boolean;
   contributorLogin: string;
   contributorAddress: string;
   prNumber: number;
@@ -323,10 +332,49 @@ export interface BountyCompletedParams {
   network: Network;
 }
 
+function formatCommissionBreakdown(params: {
+  fundedAmount: number | bigint;
+  contributorAmount: number | bigint;
+  commissionAmount: number | bigint;
+  commissionBps: number;
+  isZeroCommissionProject: boolean;
+}): string {
+  const {
+    fundedAmount,
+    contributorAmount,
+    commissionAmount,
+    commissionBps,
+    isZeroCommissionProject,
+  } = params;
+
+  const commissionAmountNum = Number(commissionAmount);
+
+  // No commission (globally disabled)
+  if (commissionBps === 0 && !isZeroCommissionProject) {
+    return `- **Amount:** ${formatBCH(contributorAmount)} BCH`;
+  }
+
+  // Zero commission (founding partner)
+  if (isZeroCommissionProject) {
+    return `- **Bounty amount:** ${formatBCH(fundedAmount)} BCH
+- **Commission:** 0 BCH (Founding Partner)`;
+  }
+
+  // With commission
+  const commissionPercent = (commissionBps / 100).toFixed(commissionBps % 100 === 0 ? 0 : 1);
+  return `- **Bounty amount:** ${formatBCH(fundedAmount)} BCH
+- **Commission:** ${formatBCH(commissionAmountNum)} BCH (${commissionPercent}%)
+- **You receive:** ${formatBCH(contributorAmount)} BCH`;
+}
+
 export function bountyCompletedMessage(params: BountyCompletedParams): string {
   const {
     issueNumber,
-    amount,
+    fundedAmount,
+    contributorAmount,
+    commissionAmount,
+    commissionBps,
+    isZeroCommissionProject,
     contributorLogin,
     contributorAddress,
     prNumber,
@@ -334,12 +382,20 @@ export function bountyCompletedMessage(params: BountyCompletedParams): string {
     network,
   } = params;
 
-  return `🎉 **Bounty Paid: ${formatBCH(amount)} BCH**
+  const commissionBreakdown = formatCommissionBreakdown({
+    fundedAmount,
+    contributorAmount,
+    commissionAmount,
+    commissionBps,
+    isZeroCommissionProject,
+  });
+
+  return `🎉 **Bounty Paid!**
 
 Congratulations @${contributorLogin}! Your solution has been merged and the bounty has been paid.
 
 **Payment Details:**
-- **Amount:** ${formatBCH(amount)} BCH
+${commissionBreakdown}
 - **Recipient:** \`${contributorAddress}\`
 - **Issue:** #${issueNumber}
 - **PR:** #${prNumber}

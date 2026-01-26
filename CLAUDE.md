@@ -406,3 +406,70 @@ This will:
 3. Post a confirmation message
 
 Only works for bounties with `PENDING_FUNDING` status. Funded bounties cannot be cancelled (close the issue to trigger a refund instead).
+
+## Commission Model
+
+The oracle can charge a configurable commission on successful bounty completions.
+
+### Configuration
+
+Environment variables:
+- `COMMISSION_BPS` - Commission rate in basis points (100 = 1%, 150 = 1.5%). Default: 0
+- `ZERO_COMMISSION_PROJECTS` - Comma-separated list of "founding partner" projects that pay 0% commission. Format: `github:owner/repo,gitlab:owner/repo`
+
+### Commission Behavior
+
+| Event | Commission Charged |
+|-------|-------------------|
+| Bounty completed (PR merged) | Yes |
+| Bounty refunded (issue closed) | No |
+| Bounty expired (timeout) | No |
+
+### Minimum Bounty Amounts
+
+Network-specific minimums ensure commission is meaningful:
+- **Mainnet**: 0.001 BCH minimum
+- **Testnet**: 0.0001 BCH minimum
+
+### Smart Contract Changes
+
+The `complete()` function supports 1 or 2 outputs:
+- **No commission**: 1 output (contributor only)
+- **With commission**: 2 outputs (contributor + oracle fee)
+
+Oracle signature format with commission:
+```
+"COMPLETE" + issueHash + contributorPKH + contributorAmount + oracleFeePKH + commissionAmount
+```
+
+### Commission Calculation (`src/lib/commission.ts`)
+
+```typescript
+calculateCommission(fundedAmount, txFee, platform, repoOwner, repoName)
+```
+
+Returns:
+- `commissionAmount` - Commission in satoshis
+- `commissionBps` - Rate in basis points
+- `contributorAmount` - What contributor receives
+- `isZeroCommissionProject` - Whether this is a founding partner
+
+### Message Display
+
+**With commission:**
+```
+- Bounty amount: 1.0 BCH
+- Commission: 0.015 BCH (1.5%)
+- You receive: 0.985 BCH
+```
+
+**Zero commission (founding partner):**
+```
+- Bounty amount: 1.0 BCH
+- Commission: 0 BCH (Founding Partner)
+```
+
+**No commission (globally disabled):**
+```
+- Amount: 1.0 BCH
+```

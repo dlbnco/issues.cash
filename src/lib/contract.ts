@@ -110,6 +110,40 @@ export function pubkeyToAddress(pubkey: Buffer, network: Network): string {
 }
 
 /**
+ * Convert public key to PKH (hash160)
+ */
+export function pubkeyToPKH(pubkey: Buffer): Buffer {
+  const pubkeyBuffer = Buffer.isBuffer(pubkey)
+    ? pubkey
+    : Buffer.from(pubkey, "hex");
+
+  // Hash160 of public key
+  const hash256 = crypto.createHash("sha256").update(pubkeyBuffer).digest();
+  const pkh = crypto.createHash("ripemd160").update(hash256).digest();
+
+  return pkh;
+}
+
+/**
+ * Get oracle fee PKH for commission payments
+ * Derived from oracle public key
+ */
+export function getOracleFeePKH(oracleKeys: OracleKeys): Buffer {
+  return pubkeyToPKH(oracleKeys.publicKey);
+}
+
+/**
+ * Get oracle fee address for commission payments
+ * Derived from oracle public key
+ */
+export function getOracleFeeAddress(
+  oracleKeys: OracleKeys,
+  network: Network
+): string {
+  return pubkeyToAddress(oracleKeys.publicKey, network);
+}
+
+/**
  * Load oracle keys from file
  */
 export function loadOracleKeys(
@@ -426,43 +460,58 @@ export function signOracleMessage(
 /**
  * Complete bounty - Pay contributor after PR merged
  *
- * Oracle signs: "COMPLETE" + issueHash + contributorPKH + amount
+ * Oracle signs: "COMPLETE" + issueHash + contributorPKH + contributorAmount + oracleFeePKH + commissionAmount
  *
  * @param contract - The bounty contract instance
  * @param provider - The Electrum network provider
  * @param contributorAddress - BCH address of the contributor to pay
+ * @param contributorAmount - Amount to pay contributor (in satoshis)
  * @param issueHash - SHA256 hash of the issue URL (hex string)
- * @param amount - Exact bounty amount to pay (in satoshis)
  * @param oraclePrivateKey - Oracle's private key for signing
+ * @param oracleFeePKH - Oracle fee PKH for commission (null if no commission)
+ * @param commissionAmount - Commission amount for oracle (0 if no commission)
  * @returns Transaction result with txid and hex
  */
 export async function completeBounty(
   contract: Contract,
   provider: ElectrumNetworkProvider,
   contributorAddress: string,
+  contributorAmount: bigint,
   issueHash: string,
-  amount: bigint,
   oraclePrivateKey: Buffer,
+  oracleFeePKH: Buffer | null,
+  commissionAmount: bigint,
 ): Promise<TransactionResult> {
   console.log("💰 Completing bounty...");
   console.log(`   Contributor: ${contributorAddress}`);
-  console.log(`   Amount: ${amount} satoshis`);
+  console.log(`   Contributor amount: ${contributorAmount} satoshis`);
+  if (commissionAmount > 0) {
+    console.log(`   Commission: ${commissionAmount} satoshis`);
+  }
 
   // Convert contributor address to PKH
   const contributorPKH = addressToPKH(contributorAddress);
   console.log(`   Contributor PKH: ${contributorPKH.toString("hex")}`);
 
-  // Convert amount to 8-byte little-endian buffer
-  const amountBuffer = Buffer.alloc(8);
-  amountBuffer.writeBigInt64LE(amount);
+  // Use zero PKH if no commission (contract still expects the parameter)
+  const effectiveOracleFeePKH = oracleFeePKH ?? Buffer.alloc(20, 0);
+
+  // Convert amounts to 8-byte little-endian buffers
+  const contributorAmountBuffer = Buffer.alloc(8);
+  contributorAmountBuffer.writeBigInt64LE(contributorAmount);
+
+  const commissionAmountBuffer = Buffer.alloc(8);
+  commissionAmountBuffer.writeBigInt64LE(commissionAmount);
 
   // Construct the message that oracle signs
-  // Format: "COMPLETE" + issueHash + contributorPKH + amount (8 bytes LE)
+  // Format: "COMPLETE" + issueHash + contributorPKH + contributorAmount + oracleFeePKH + commissionAmount
   const message = Buffer.concat([
     Buffer.from("COMPLETE"),
     Buffer.from(issueHash, "hex"),
     contributorPKH,
-    amountBuffer,
+    contributorAmountBuffer,
+    effectiveOracleFeePKH,
+    commissionAmountBuffer,
   ]);
 
   // Sign the message
@@ -491,19 +540,37 @@ export async function completeBounty(
   console.log(`   Input value: ${inputValue} satoshis`);
 
   // Verify contract has enough funds
-  if (inputValue < amount) {
-    throw new Error(`Insufficient funds: ${inputValue} < ${amount}`);
+  const totalOutput = contributorAmount + commissionAmount;
+  if (inputValue < totalOutput) {
+    throw new Error(`Insufficient funds: ${inputValue} < ${totalOutput}`);
   }
 
   // Build transaction using TransactionBuilder
   const txBuilder = new TransactionBuilder({ provider });
 
   // Add contract UTXO as input with the complete unlocker
-  const unlocker = contract.unlock.complete(contributorPKH, amount, oracleSig);
+  const unlocker = contract.unlock.complete(
+    contributorPKH,
+    contributorAmount,
+    effectiveOracleFeePKH,
+    commissionAmount,
+    oracleSig
+  );
   txBuilder.addInput(utxo, unlocker);
 
-  // Add output to contributor (exact bounty amount)
-  txBuilder.addOutput({ to: contributorAddress, amount });
+  // Add output to contributor
+  txBuilder.addOutput({ to: contributorAddress, amount: contributorAmount });
+
+  // Add commission output if commission > 0
+  if (commissionAmount > 0 && oracleFeePKH) {
+    // Convert PKH to address for the output
+    // We need to determine the network from the contributor address prefix
+    const isTestnet = contributorAddress.startsWith("bchtest:");
+    const network: Network = isTestnet ? "testnet3" : "mainnet";
+    const oracleFeeAddress = pkhToAddress(oracleFeePKH, network);
+    txBuilder.addOutput({ to: oracleFeeAddress, amount: commissionAmount });
+    console.log(`   Oracle fee address: ${oracleFeeAddress}`);
+  }
 
   // Send transaction
   const tx = await txBuilder.send();
