@@ -38,6 +38,7 @@
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.0.0",
+    "gitlab-event-types": "^3.0.1",
     "jest": "^30.2.0",
     "prisma": "6.18.0",
     "tailwindcss": "^4",
