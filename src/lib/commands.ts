@@ -1,4 +1,5 @@
 import { decodeCashAddress } from "@bitauth/libauth";
+import { MIN_BOUNTY_BCH, MAX_BOUNTY_BCH } from "./constants";
 
 export type CommandType = "create" | "cancel";
 
@@ -70,18 +71,20 @@ export function parseCommand(command: string): ParsedCommand {
   }
 
   // BCH has max supply of 21M, anything above is suspicious
-  if (amount > 21_000_000) {
+  if (amount > MAX_BOUNTY_BCH) {
     return {
       success: false,
-      error: `Amount too large: ${amount}. Maximum is 21,000,000 BCH.`,
+      error: `Amount too large: ${amount}. Maximum is ${MAX_BOUNTY_BCH.toLocaleString()} BCH.`,
     };
   }
 
-  // Minimum bounty to prevent spam (0.0001 BCH = ~$0.04)
-  if (amount < 0.0001) {
+  // Minimum bounty to prevent spam - use lowest network minimum at parse time
+  // Network-specific validation happens later in handler with validateBountyAmount()
+  const lowestMinimum = Math.min(...Object.values(MIN_BOUNTY_BCH));
+  if (amount < lowestMinimum) {
     return {
       success: false,
-      error: `Amount too small: ${amount}. Minimum is 0.0001 BCH.`,
+      error: `Amount too small: ${amount}. Minimum is ${lowestMinimum} BCH.`,
     };
   }
 
@@ -244,6 +247,41 @@ export function validateAddressForNetwork(
  */
 export function bchToSats(bch: number): number {
   return Math.floor(bch * 100_000_000);
+}
+
+/**
+ * Validate bounty amount for a specific network
+ * Returns validation result with error message if invalid
+ */
+export function validateBountyAmount(
+  amount: number,
+  network: string
+): { valid: boolean; error?: string } {
+  if (isNaN(amount) || amount <= 0) {
+    return {
+      valid: false,
+      error: `Invalid amount. Must be a positive number.`,
+    };
+  }
+
+  // Check maximum (protocol limit)
+  if (amount > MAX_BOUNTY_BCH) {
+    return {
+      valid: false,
+      error: `Amount too large: ${amount} BCH. Maximum is ${MAX_BOUNTY_BCH.toLocaleString()} BCH.`,
+    };
+  }
+
+  // Check minimum (network-specific)
+  const minBounty = MIN_BOUNTY_BCH[network] ?? MIN_BOUNTY_BCH["mainnet"];
+  if (amount < minBounty) {
+    return {
+      valid: false,
+      error: `Amount too small: ${amount} BCH. Minimum for ${network} is ${minBounty} BCH.`,
+    };
+  }
+
+  return { valid: true };
 }
 
 /**

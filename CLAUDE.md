@@ -406,3 +406,108 @@ This will:
 3. Post a confirmation message
 
 Only works for bounties with `PENDING_FUNDING` status. Funded bounties cannot be cancelled (close the issue to trigger a refund instead).
+
+## Commission Model
+
+The oracle can charge a configurable commission on successful bounty completions.
+
+### Configuration
+
+Environment variables:
+- `COMMISSION_BPS` - Commission rate in basis points (100 = 1%, 150 = 1.5%). Default: 0
+- `ZERO_COMMISSION_PROJECTS` - Comma-separated list of "founding partner" projects that pay 0% commission. Format: `github:owner/repo,gitlab:owner/repo`
+
+### Commission Behavior
+
+| Event | Commission Charged |
+|-------|-------------------|
+| Bounty completed (PR merged) | Yes |
+| Bounty refunded (issue closed) | No |
+| Bounty expired (timeout) | No |
+
+### Minimum Bounty Amounts
+
+Network-specific minimums ensure commission is meaningful:
+- **Mainnet**: 0.001 BCH minimum
+- **Testnet**: 0.0001 BCH minimum
+
+### Smart Contract Changes
+
+The `complete()` function supports 1 or 2 outputs:
+- **No commission**: 1 output (contributor only)
+- **With commission**: 2 outputs (contributor + oracle fee)
+
+Oracle signature format with commission:
+```
+"COMPLETE" + issueHash + contributorPKH + contributorAmount + oracleFeePKH + commissionAmount
+```
+
+### Commission Calculation (`src/lib/commission.ts`)
+
+```typescript
+calculateCommission(fundedAmount, txFee, platform, repoOwner, repoName)
+```
+
+Returns:
+- `commissionAmount` - Commission in satoshis
+- `commissionBps` - Rate in basis points
+- `contributorAmount` - What contributor receives
+- `isZeroCommissionProject` - Whether this is a founding partner
+
+### Message Display
+
+**With commission:**
+```
+- Bounty amount: 1.0 BCH
+- Commission: 0.015 BCH (1.5%)
+- You receive: 0.985 BCH
+```
+
+**Zero commission (founding partner):**
+```
+- Bounty amount: 1.0 BCH
+- Commission: 0 BCH (Founding Partner)
+```
+
+**No commission (globally disabled):**
+```
+- Amount: 1.0 BCH
+```
+
+## Future Work
+
+### Multi-Funder Bounties with NFT Receipts (v2)
+
+Currently bounties support a single funder (the maintainer). A future enhancement would allow multiple people to fund the same bounty, with pro-rata refunds if the issue is closed without a solution.
+
+**Design decisions (already made):**
+- Funder does NOT hold receipt NFT in their wallet (no WalletConnect complexity)
+- Early withdrawal NOT allowed (protects developers who start working on a bounty)
+- Batch refunds preferred (cheaper and faster than individual TXs)
+- Display funders and amounts in issue comments
+
+**Proposed architecture:**
+
+1. **NFT Commitment Format:** `bytes20 refundPKH + bytes8 amount` (28 bytes)
+
+2. **Contract holds all receipts** - Receipt NFTs stay inside the contract (not sent to funders), so oracle can batch-process refunds without needing funder signatures.
+
+3. **Contract Functions:**
+   - `addFunds(refundPKH)` - Add BCH, mint receipt NFT (stays in contract)
+   - `complete()` - Pay contributor, burn all receipts
+   - `batchRefund()` - Oracle triggers, pays all funders in one TX
+   - `timeout()` - Same as batchRefund but no oracle signature needed
+
+4. **Trust model:** Refund address is trustlessly encoded at funding time. Funders cannot silently withdraw - only on explicit issue close or timeout.
+
+5. **Message display example:**
+   ```markdown
+   ## Funders
+   | Address | Amount |
+   |---------|--------|
+   | bitcoincash:qp... | 0.5 BCH |
+   | bitcoincash:qr... | 1.0 BCH |
+   | **Total** | **1.5 BCH** |
+   ```
+
+**Reference:** CashScript docs on [NFT receipts](https://cashscript.org/docs/guides/covenants#issuing-nfts-as-receipts) show the pattern for minting receipts and validating them on withdrawal.

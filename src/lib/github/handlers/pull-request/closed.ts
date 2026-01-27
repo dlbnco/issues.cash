@@ -85,7 +85,7 @@ export async function handlePullRequestClosed(
 
       const network = fromPrismaToElectrumNetwork(bounty.network);
 
-      const txResult = await completeBountyPayout(
+      const { transaction, commission } = await completeBountyPayout(
         bounty,
         attempt.contributorAddress,
         network,
@@ -95,16 +95,20 @@ export async function handlePullRequestClosed(
         where: { id: attempt.id },
         data: {
           status: AttemptStatus.APPROVED,
-          settlementTxId: txResult.txid,
+          settlementTxId: transaction.txid,
           updatedAt: new Date(),
         },
       });
 
       await updateBountyComments(bounty.id);
 
+      const commissionInfo = commission.commissionAmount > BigInt(0)
+        ? ` (commission: ${commission.commissionAmount} sats)`
+        : "";
+
       return {
         success: true,
-        message: `Bounty completed - paid to ${attempt.contributorAddress} (tx: ${txResult.txid})`,
+        message: `Bounty completed - paid to ${attempt.contributorAddress} (tx: ${transaction.txid})${commissionInfo}`,
         bounty: {
           id: bounty.id,
           contractAddress: bounty.contractAddress,

@@ -279,21 +279,18 @@ async function handleMergeRequestMerged(
   // Complete the bounty - pay contributor
   try {
     const network = fromPrismaToElectrumNetwork(bounty.network);
-    const result = await completeBountyPayout(
+    const { transaction, commission } = await completeBountyPayout(
       bounty,
       attempt.contributorAddress,
       network
     );
-
-    // Calculate payout amount (same as in completeBountyPayout)
-    const amount = (bounty.fundedAmount ?? bounty.amount) - (bounty.feeAmount ?? BigInt(0));
 
     // Update attempt status
     await prisma.attempt.update({
       where: { id: attempt.id },
       data: {
         status: AttemptStatus.APPROVED,
-        settlementTxId: result.txid,
+        settlementTxId: transaction.txid,
       },
     });
 
@@ -301,11 +298,15 @@ async function handleMergeRequestMerged(
     if (credentials.accessToken) {
       const completionMessage = messages.bountyCompletedMessage({
         issueNumber: bounty.issueNumber,
-        amount,
+        fundedAmount: bounty.fundedAmount ?? bounty.amount,
+        contributorAmount: commission.contributorAmount,
+        commissionAmount: commission.commissionAmount,
+        commissionBps: commission.commissionBps,
+        isZeroCommissionProject: commission.isZeroCommissionProject,
         contributorLogin: attempt.contributorLogin,
         contributorAddress: attempt.contributorAddress,
         prNumber: mrNumber,
-        txId: result.txid,
+        txId: transaction.txid,
         network,
       });
 
@@ -331,7 +332,7 @@ async function handleMergeRequestMerged(
 
     return {
       success: true,
-      message: `Bounty paid: ${result.txid}`,
+      message: `Bounty paid: ${transaction.txid}`,
     };
   } catch (error) {
     console.error("Error completing GitLab bounty:", error);
