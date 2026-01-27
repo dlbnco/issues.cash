@@ -66,8 +66,9 @@ contract DynamicBounty(
         // Verify oracle signed this exact message
         require(checkDataSig(oracleSig, message, oraclePubkey));
 
-        // Verify total outputs don't exceed input (allows overpayment as extra miner fee)
-        require(contributorAmount + commissionAmount <= tx.inputs[0].value);
+        // Note: We don't check input values here to support multi-UTXO spending.
+        // Bitcoin consensus rules already prevent outputs > inputs.
+        // The oracle signature commits to exact output amounts, preventing overspend.
 
         // Build contributor locking bytecode
         bytes25 contributorLock = new LockingBytecodeP2PKH(contributorPKH);

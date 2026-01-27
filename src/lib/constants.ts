@@ -1,9 +1,14 @@
 import { Network } from "cashscript";
 
-// Since each use may result in a different
-// transaction size, instead of trying to estimate the fee,
-// we will just use a hardcoded fee with a slight margin.
-export const UNLOCKING_TX_FEE_AMOUNT = BigInt(420);
+// Base fee for unlocking transactions (single input)
+// For multi-input transactions, add PER_INPUT_FEE for each additional input
+export const UNLOCKING_TX_FEE_AMOUNT = BigInt(1000);
+
+// Additional fee per input beyond the first (~150 bytes per input at 1 sat/byte)
+export const PER_INPUT_FEE = BigInt(150);
+
+// Dust limit - minimum output value
+export const DUST_LIMIT = BigInt(546);
 
 export const DEFAULT_BCH_NETWORK = "mainnet" as Network;
 

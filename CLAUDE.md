@@ -473,3 +473,41 @@ Returns:
 ```
 - Amount: 1.0 BCH
 ```
+
+## Future Work
+
+### Multi-Funder Bounties with NFT Receipts (v2)
+
+Currently bounties support a single funder (the maintainer). A future enhancement would allow multiple people to fund the same bounty, with pro-rata refunds if the issue is closed without a solution.
+
+**Design decisions (already made):**
+- Funder does NOT hold receipt NFT in their wallet (no WalletConnect complexity)
+- Early withdrawal NOT allowed (protects developers who start working on a bounty)
+- Batch refunds preferred (cheaper and faster than individual TXs)
+- Display funders and amounts in issue comments
+
+**Proposed architecture:**
+
+1. **NFT Commitment Format:** `bytes20 refundPKH + bytes8 amount` (28 bytes)
+
+2. **Contract holds all receipts** - Receipt NFTs stay inside the contract (not sent to funders), so oracle can batch-process refunds without needing funder signatures.
+
+3. **Contract Functions:**
+   - `addFunds(refundPKH)` - Add BCH, mint receipt NFT (stays in contract)
+   - `complete()` - Pay contributor, burn all receipts
+   - `batchRefund()` - Oracle triggers, pays all funders in one TX
+   - `timeout()` - Same as batchRefund but no oracle signature needed
+
+4. **Trust model:** Refund address is trustlessly encoded at funding time. Funders cannot silently withdraw - only on explicit issue close or timeout.
+
+5. **Message display example:**
+   ```markdown
+   ## Funders
+   | Address | Amount |
+   |---------|--------|
+   | bitcoincash:qp... | 0.5 BCH |
+   | bitcoincash:qr... | 1.0 BCH |
+   | **Total** | **1.5 BCH** |
+   ```
+
+**Reference:** CashScript docs on [NFT receipts](https://cashscript.org/docs/guides/covenants#issuing-nfts-as-receipts) show the pattern for minting receipts and validating them on withdrawal.

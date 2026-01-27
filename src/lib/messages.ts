@@ -168,6 +168,8 @@ ${formatBCH(totalRequired)}
 ${contractAddress}
 \`\`\`
 
+⚠️ **Important:** Fund the bounty in a **single transaction**. Multiple transactions will increase the network fee when the bounty is paid out or refunded.
+
 ⚠️ Anyone can deposit to the contract, but refunds can only be sent to the specified refund address.
 
 ## Bounty details

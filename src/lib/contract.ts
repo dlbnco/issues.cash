@@ -17,7 +17,7 @@ import {
 import crypto from "crypto";
 import { secp256k1 } from "@noble/curves/secp256k1.js";
 import fs from "fs";
-import { UNLOCKING_TX_FEE_AMOUNT } from "./constants";
+import { UNLOCKING_TX_FEE_AMOUNT, PER_INPUT_FEE, DUST_LIMIT } from "./constants";
 
 export interface OracleKeys {
   privateKey: Buffer;
@@ -520,43 +520,56 @@ export async function completeBounty(
     `   Oracle signature: ${Buffer.from(oracleSig).toString("hex").slice(0, 32)}...`,
   );
 
-  // Get contract UTXOs
+  // Get all contract UTXOs
   const utxos = await contract.getUtxos();
-  console.log(`   Found ${utxos.length} UTXOs`);
 
   if (utxos.length === 0) {
     throw new Error("Contract has no funds");
   }
 
-  if (utxos.length > 1) {
-    console.warn(
-      `   Warning: Contract has ${utxos.length} UTXOs, using first one only`,
-    );
-  }
+  // Sum all input values
+  const totalInputValue = utxos.reduce(
+    (sum, utxo) => sum + utxo.satoshis,
+    BigInt(0)
+  );
+  console.log(
+    `   Found ${utxos.length} UTXOs, total: ${totalInputValue} satoshis`
+  );
 
-  // Use only the first UTXO
-  const utxo = utxos[0];
-  const inputValue = utxo.satoshis;
-  console.log(`   Input value: ${inputValue} satoshis`);
+  // Calculate dynamic fee based on number of inputs
+  const totalFee =
+    UNLOCKING_TX_FEE_AMOUNT + BigInt(utxos.length - 1) * PER_INPUT_FEE;
+  console.log(`   Calculated fee: ${totalFee} satoshis (${utxos.length} inputs)`);
 
   // Verify contract has enough funds
   const totalOutput = contributorAmount + commissionAmount;
-  if (inputValue < totalOutput) {
-    throw new Error(`Insufficient funds: ${inputValue} < ${totalOutput}`);
+  if (totalInputValue < totalOutput + totalFee) {
+    throw new Error(
+      `Insufficient funds: ${totalInputValue} < ${totalOutput} + ${totalFee} fee`
+    );
+  }
+
+  // Warn if fee is significant (>10% of output)
+  if (totalFee * BigInt(10) > totalOutput) {
+    console.warn(
+      `   ⚠️ High fee ratio: ${totalFee} sats fee for ${totalOutput} sats output`
+    );
   }
 
   // Build transaction using TransactionBuilder
   const txBuilder = new TransactionBuilder({ provider });
 
-  // Add contract UTXO as input with the complete unlocker
-  const unlocker = contract.unlock.complete(
-    contributorPKH,
-    contributorAmount,
-    effectiveOracleFeePKH,
-    commissionAmount,
-    oracleSig
-  );
-  txBuilder.addInput(utxo, unlocker);
+  // Add ALL UTXOs as inputs (each with the same unlocker)
+  for (const utxo of utxos) {
+    const unlocker = contract.unlock.complete(
+      contributorPKH,
+      contributorAmount,
+      effectiveOracleFeePKH,
+      commissionAmount,
+      oracleSig
+    );
+    txBuilder.addInput(utxo, unlocker);
+  }
 
   // Add output to contributor
   txBuilder.addOutput({ to: contributorAddress, amount: contributorAmount });
@@ -577,6 +590,7 @@ export async function completeBounty(
 
   console.log("✅ Bounty completed!");
   console.log(`   TX: ${tx.txid}`);
+  console.log(`   Fee paid: ${totalInputValue - totalOutput} satoshis`);
 
   return {
     txid: tx.txid,
@@ -584,34 +598,79 @@ export async function completeBounty(
   };
 }
 
+export interface RefundResult {
+  transaction: TransactionResult;
+  refundedAmount: bigint;
+  fee: bigint;
+}
+
 /**
  * Refund bounty - Return funds to maintainer
  *
+ * Consolidates all UTXOs and returns total minus fee to maintainer.
  * Oracle signs: "REFUND" + issueHash + amount
  *
  * @param contract - The bounty contract instance
  * @param provider - The Electrum network provider
  * @param maintainerAddress - BCH address of the maintainer to refund
  * @param issueHash - SHA256 hash of the issue URL (hex string)
- * @param amount - Exact refund amount (in satoshis)
  * @param oraclePrivateKey - Oracle's private key for signing
- * @returns Transaction result with txid and hex
+ * @returns RefundResult with transaction, refunded amount, and fee
  */
 export async function refundBounty(
   contract: Contract,
   provider: ElectrumNetworkProvider,
   maintainerAddress: string,
   issueHash: string,
-  amount: bigint,
   oraclePrivateKey: Buffer,
-): Promise<TransactionResult> {
+): Promise<RefundResult> {
   console.log("↩️  Refunding bounty...");
   console.log(`   Maintainer: ${maintainerAddress}`);
-  console.log(`   Amount: ${amount} satoshis`);
 
-  // Convert amount to 8-byte little-endian buffer
+  // Get all contract UTXOs
+  const utxos = await contract.getUtxos();
+
+  if (utxos.length === 0) {
+    throw new Error("Contract has no funds");
+  }
+
+  // Sum all input values
+  const totalInputValue = utxos.reduce(
+    (sum, utxo) => sum + utxo.satoshis,
+    BigInt(0)
+  );
+  console.log(
+    `   Found ${utxos.length} UTXOs, total: ${totalInputValue} satoshis`
+  );
+
+  // Calculate dynamic fee based on number of inputs
+  const totalFee =
+    UNLOCKING_TX_FEE_AMOUNT + BigInt(utxos.length - 1) * PER_INPUT_FEE;
+  console.log(`   Calculated fee: ${totalFee} satoshis (${utxos.length} inputs)`);
+
+  // Calculate refund amount (total minus fee)
+  const refundAmount = totalInputValue - totalFee;
+
+  // Check if refund would be below dust limit
+  if (refundAmount < DUST_LIMIT) {
+    throw new Error(
+      `Refund amount ${refundAmount} would be below dust limit ${DUST_LIMIT}. ` +
+        `Too many small UTXOs or insufficient funds.`
+    );
+  }
+
+  console.log(`   Refund amount: ${refundAmount} satoshis`);
+
+  // Warn if fee is significant (>10% of refund)
+  if (totalFee * BigInt(10) > refundAmount) {
+    console.warn(
+      `   ⚠️ High fee ratio: ${totalFee} sats fee for ${refundAmount} sats refund`
+    );
+  }
+
+  // Convert refund amount to 8-byte little-endian buffer
   const amountBuffer = Buffer.alloc(8);
-  amountBuffer.writeBigInt64LE(amount);
+  amountBuffer.writeBigInt64LE(refundAmount);
 
   // Construct the refund message
   // Format: "REFUND" + issueHash + amount (8 bytes LE)
@@ -621,79 +680,70 @@ export async function refundBounty(
     amountBuffer,
   ]);
 
-  // Sign the message
+  // Sign the message with the calculated refund amount
   const oracleSig = signOracleMessage(message, oraclePrivateKey);
   console.log(
-    `   Oracle signature: ${Buffer.from(oracleSig).toString("hex").slice(0, 32)}...`,
+    `   Oracle signature: ${Buffer.from(oracleSig).toString("hex").slice(0, 32)}...`
   );
-
-  // Get contract UTXOs
-  const utxos = await contract.getUtxos();
-  console.log(`   Found ${utxos.length} UTXOs`);
-
-  if (utxos.length === 0) {
-    throw new Error("Contract has no funds");
-  }
-
-  if (utxos.length > 1) {
-    console.warn(
-      `   Warning: Contract has ${utxos.length} UTXOs, using first one only`,
-    );
-  }
-
-  // Use only the first UTXO
-  const utxo = utxos[0];
-  const inputValue = utxo.satoshis;
-  console.log(`   Input value: ${inputValue} satoshis`);
-
-  // Verify contract has enough funds
-  if (inputValue < amount) {
-    throw new Error(`Insufficient funds: ${inputValue} < ${amount}`);
-  }
 
   // Build transaction using TransactionBuilder
   const txBuilder = new TransactionBuilder({ provider });
 
-  // Add contract UTXO as input with the refund unlocker
-  const unlocker = contract.unlock.refund(amount, oracleSig);
-  txBuilder.addInput(utxo, unlocker);
+  // Add ALL UTXOs as inputs (each with the same unlocker)
+  for (const utxo of utxos) {
+    const unlocker = contract.unlock.refund(refundAmount, oracleSig);
+    txBuilder.addInput(utxo, unlocker);
+  }
 
   // Add output to maintainer (exact refund amount)
-  txBuilder.addOutput({ to: maintainerAddress, amount });
+  txBuilder.addOutput({ to: maintainerAddress, amount: refundAmount });
 
   // Send transaction
   const tx = await txBuilder.send();
 
   console.log("✅ Bounty refunded!");
   console.log(`   TX: ${tx.txid}`);
+  console.log(`   Refunded: ${refundAmount} satoshis`);
+  console.log(`   Fee paid: ${totalFee} satoshis`);
 
   return {
-    txid: tx.txid,
-    hex: tx.hex,
+    transaction: {
+      txid: tx.txid,
+      hex: tx.hex,
+    },
+    refundedAmount: refundAmount,
+    fee: totalFee,
   };
+}
+
+export interface TimeoutResult {
+  transaction: TransactionResult;
+  refundedAmount: bigint;
+  fee: bigint;
 }
 
 /**
  * Timeout bounty - Automatic refund after expiry
  *
- * No oracle signature needed - anyone can trigger this after locktime
+ * Consolidates all UTXOs and returns total minus fee to maintainer.
+ * No oracle signature needed - anyone can trigger this after locktime.
  *
  * @param contract - The bounty contract instance
  * @param provider - The Electrum network provider
  * @param maintainerAddress - BCH address of the maintainer to refund
  * @param locktime - Unix timestamp when bounty expires
- * @returns Transaction result with txid and hex
+ * @returns TimeoutResult with transaction, refunded amount, and fee
  */
 export async function timeoutBounty(
   contract: Contract,
   provider: ElectrumNetworkProvider,
   maintainerAddress: string,
   locktime: number,
-): Promise<TransactionResult> {
+): Promise<TimeoutResult> {
   console.log("⏰ Processing timeout refund...");
   console.log(`   Maintainer: ${maintainerAddress}`);
   console.log(
-    `   Locktime: ${locktime} (${new Date(locktime * 1000).toISOString()})`,
+    `   Locktime: ${locktime} (${new Date(locktime * 1000).toISOString()})`
   );
 
   // Check if locktime has passed
@@ -703,39 +753,61 @@ export async function timeoutBounty(
     const days = Math.floor(remaining / 86400);
     const hours = Math.floor((remaining % 86400) / 3600);
     throw new Error(
-      `Locktime not reached. ${days} days and ${hours} hours remaining.`,
+      `Locktime not reached. ${days} days and ${hours} hours remaining.`
     );
   }
 
-  // Get contract UTXOs
+  // Get all contract UTXOs
   const utxos = await contract.getUtxos();
-  console.log(`   Found ${utxos.length} UTXOs`);
 
   if (utxos.length === 0) {
     throw new Error("Contract has no funds");
   }
 
-  if (utxos.length > 1) {
-    console.warn(
-      `   Warning: Contract has ${utxos.length} UTXOs, using first one only`,
+  // Sum all input values
+  const totalInputValue = utxos.reduce(
+    (sum, utxo) => sum + utxo.satoshis,
+    BigInt(0)
+  );
+  console.log(
+    `   Found ${utxos.length} UTXOs, total: ${totalInputValue} satoshis`
+  );
+
+  // Calculate dynamic fee based on number of inputs
+  const totalFee =
+    UNLOCKING_TX_FEE_AMOUNT + BigInt(utxos.length - 1) * PER_INPUT_FEE;
+  console.log(`   Calculated fee: ${totalFee} satoshis (${utxos.length} inputs)`);
+
+  // Calculate output amount
+  const outputAmount = totalInputValue - totalFee;
+
+  // Check if output would be below dust limit
+  if (outputAmount < DUST_LIMIT) {
+    throw new Error(
+      `Output amount ${outputAmount} would be below dust limit ${DUST_LIMIT}. ` +
+        `Too many small UTXOs or insufficient funds.`
     );
   }
 
-  // Use only the first UTXO (contract checks per-input value)
-  const utxo = utxos[0];
-  const inputValue = utxo.satoshis;
-  console.log(`   Input value: ${inputValue} satoshis`);
+  console.log(`   Output amount: ${outputAmount} satoshis`);
+
+  // Warn if fee is significant (>10% of output)
+  if (totalFee * BigInt(10) > outputAmount) {
+    console.warn(
+      `   ⚠️ High fee ratio: ${totalFee} sats fee for ${outputAmount} sats output`
+    );
+  }
 
   // Build transaction using TransactionBuilder
   const txBuilder = new TransactionBuilder({ provider });
 
-  // Add contract UTXO as input with the timeout unlocker
-  const unlocker = contract.unlock.timeout();
-  txBuilder.addInput(utxo, unlocker);
+  // Add ALL UTXOs as inputs (each with the same unlocker)
+  for (const utxo of utxos) {
+    const unlocker = contract.unlock.timeout();
+    txBuilder.addInput(utxo, unlocker);
+  }
 
-  // Add output to maintainer (input value minus fee, max 1000 sats as per contract)
-  const fee = UNLOCKING_TX_FEE_AMOUNT;
-  const outputAmount = inputValue - fee;
+  // Add output to maintainer
   txBuilder.addOutput({ to: maintainerAddress, amount: outputAmount });
 
   // Set locktime on the transaction
@@ -746,9 +818,15 @@ export async function timeoutBounty(
 
   console.log("✅ Timeout refund completed!");
   console.log(`   TX: ${tx.txid}`);
+  console.log(`   Refunded: ${outputAmount} satoshis`);
+  console.log(`   Fee paid: ${totalFee} satoshis`);
 
   return {
-    txid: tx.txid,
-    hex: tx.hex,
+    transaction: {
+      txid: tx.txid,
+      hex: tx.hex,
+    },
+    refundedAmount: outputAmount,
+    fee: totalFee,
   };
 }

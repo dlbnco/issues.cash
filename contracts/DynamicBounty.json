@@ -1,0 +1,143 @@
+{
+  "contractName": "DynamicBounty",
+  "constructorInputs": [
+    {
+      "name": "oraclePubkey",
+      "type": "pubkey"
+    },
+    {
+      "name": "maintainerPKH",
+      "type": "bytes20"
+    },
+    {
+      "name": "issueHash",
+      "type": "bytes32"
+    },
+    {
+      "name": "locktime",
+      "type": "int"
+    }
+  ],
+  "abi": [
+    {
+      "name": "complete",
+      "inputs": [
+        {
+          "name": "contributorPKH",
+          "type": "bytes20"
+        },
+        {
+          "name": "contributorAmount",
+          "type": "int"
+        },
+        {
+          "name": "oracleFeePKH",
+          "type": "bytes20"
+        },
+        {
+          "name": "commissionAmount",
+          "type": "int"
+        },
+        {
+          "name": "oracleSig",
+          "type": "datasig"
+        }
+      ]
+    },
+    {
+      "name": "refund",
+      "inputs": [
+        {
+          "name": "amount",
+          "type": "int"
+        },
+        {
+          "name": "oracleSig",
+          "type": "datasig"
+        }
+      ]
+    },
+    {
+      "name": "timeout",
+      "inputs": []
+    }
+  ],
+  "bytecode": "OP_4 OP_PICK OP_0 OP_NUMEQUAL OP_IF 434f4d504c455445 OP_3 OP_ROLL OP_CAT OP_5 OP_PICK OP_CAT OP_6 OP_PICK OP_8 OP_NUM2BIN OP_CAT OP_7 OP_PICK OP_CAT OP_8 OP_PICK OP_8 OP_NUM2BIN OP_CAT OP_9 OP_ROLL OP_SWAP OP_ROT OP_CHECKDATASIGVERIFY 76a914 OP_4 OP_ROLL OP_CAT 88ac OP_CAT OP_6 OP_PICK OP_0 OP_GREATERTHAN OP_IF OP_TXOUTPUTCOUNT OP_2 OP_NUMEQUALVERIFY OP_0 OP_OUTPUTBYTECODE OP_OVER OP_EQUALVERIFY OP_0 OP_OUTPUTVALUE OP_5 OP_PICK OP_NUMEQUALVERIFY 76a914 OP_6 OP_PICK OP_CAT 88ac OP_CAT OP_1 OP_OUTPUTBYTECODE OP_OVER OP_EQUALVERIFY OP_1 OP_OUTPUTVALUE OP_8 OP_PICK OP_NUMEQUALVERIFY OP_DROP OP_ELSE OP_TXOUTPUTCOUNT OP_1 OP_NUMEQUALVERIFY OP_0 OP_OUTPUTBYTECODE OP_OVER OP_EQUALVERIFY OP_0 OP_OUTPUTVALUE OP_5 OP_PICK OP_NUMEQUALVERIFY OP_ENDIF OP_2DROP OP_2DROP OP_2DROP OP_DROP OP_1 OP_ELSE OP_4 OP_PICK OP_1 OP_NUMEQUAL OP_IF 524546554e44 OP_3 OP_ROLL OP_CAT OP_5 OP_PICK OP_8 OP_NUM2BIN OP_CAT OP_6 OP_ROLL OP_SWAP OP_ROT OP_CHECKDATASIGVERIFY OP_TXOUTPUTCOUNT OP_1 OP_NUMEQUALVERIFY 76a914 OP_SWAP OP_CAT 88ac OP_CAT OP_0 OP_OUTPUTBYTECODE OP_EQUALVERIFY OP_0 OP_OUTPUTVALUE OP_3 OP_ROLL OP_NUMEQUAL OP_NIP OP_NIP OP_ELSE OP_4 OP_ROLL OP_2 OP_NUMEQUALVERIFY OP_3 OP_ROLL OP_CHECKLOCKTIMEVERIFY OP_DROP OP_TXOUTPUTCOUNT OP_1 OP_NUMEQUALVERIFY 76a914 OP_ROT OP_CAT 88ac OP_CAT OP_0 OP_OUTPUTBYTECODE OP_EQUAL OP_NIP OP_NIP OP_ENDIF OP_ENDIF",
+  "source": "pragma cashscript ^0.12.0;\n\n/**\n * DynamicBounty - Escrow contract for code bounties\n *\n * Participants:\n * - Maintainer: Creates bounty, funds contract, gets refund if not completed\n * - Contributor: Submits solution, receives payout if PR merged\n * - Oracle: Bot that verifies GitHub events and authorizes payouts\n *\n * Flow:\n * 1. Contract deployed with maintainer address and oracle pubkey\n * 2. Maintainer sends BCH to contract address\n * 3. Contributors work on issue\n * 4. When PR merged: Oracle signs message with contributor address\n * 5. Anyone triggers contract with oracle signature → pays contributor\n * 6. If not completed: Maintainer gets refund after timeout\n */\n\ncontract DynamicBounty(\n    // Oracle's public key (bot that verifies GitHub events)\n    pubkey oraclePubkey,\n\n    // Maintainer's address hash (for refunds)\n    bytes20 maintainerPKH,\n\n    // Unique identifier for this bounty (sha256 of GitHub issue URL)\n    bytes32 issueHash,\n\n    // Unix timestamp when bounty expires (e.g., 90 days from creation)\n    int locktime\n) {\n    /**\n     * Complete bounty - Pay contributor after PR merged\n     *\n     * @param contributorPKH - Hash160 of contributor's BCH address\n     * @param contributorAmount - Amount to pay contributor (in satoshis)\n     * @param oracleFeePKH - Hash160 of oracle fee address (ignored if commissionAmount == 0)\n     * @param commissionAmount - Commission for oracle (0 if no commission)\n     * @param oracleSig - Oracle's signature on the message\n     *\n     * Oracle signs: \"COMPLETE\" + issueHash + contributorPKH + contributorAmount + oracleFeePKH + commissionAmount\n     *\n     * This proves:\n     * - Oracle verified the PR was merged\n     * - Oracle verified this specific contributor should be paid\n     * - Oracle committed to the exact payout amounts\n     * - Commission is transparently encoded in the signed message\n     */\n    function complete(\n        bytes20 contributorPKH,\n        int contributorAmount,\n        bytes20 oracleFeePKH,\n        int commissionAmount,\n        datasig oracleSig\n    ) {\n        // Construct the message that oracle signed\n        // Format: \"COMPLETE\" + issueHash + contributorPKH + contributorAmount + oracleFeePKH + commissionAmount\n        bytes message = bytes('COMPLETE')\n            + issueHash\n            + contributorPKH\n            + bytes8(contributorAmount)\n            + oracleFeePKH\n            + bytes8(commissionAmount);\n\n        // Verify oracle signed this exact message\n        require(checkDataSig(oracleSig, message, oraclePubkey));\n\n        // Note: We don't check input values here to support multi-UTXO spending.\n        // Bitcoin consensus rules already prevent outputs > inputs.\n        // The oracle signature commits to exact output amounts, preventing overspend.\n\n        // Build contributor locking bytecode\n        bytes25 contributorLock = new LockingBytecodeP2PKH(contributorPKH);\n\n        if (commissionAmount > 0) {\n            // Two outputs: contributor + oracle fee\n            require(tx.outputs.length == 2);\n\n            // Output 0: contributor\n            require(tx.outputs[0].lockingBytecode == contributorLock);\n            require(tx.outputs[0].value == contributorAmount);\n\n            // Output 1: oracle fee\n            bytes25 oracleFeeLock = new LockingBytecodeP2PKH(oracleFeePKH);\n            require(tx.outputs[1].lockingBytecode == oracleFeeLock);\n            require(tx.outputs[1].value == commissionAmount);\n        } else {\n            // Single output: contributor only (no commission)\n            require(tx.outputs.length == 1);\n            require(tx.outputs[0].lockingBytecode == contributorLock);\n            require(tx.outputs[0].value == contributorAmount);\n        }\n    }\n\n    /**\n     * Refund maintainer - Issue closed without merge or bounty cancelled\n     *\n     * @param amount - Exact refund amount (in satoshis)\n     * @param oracleSig - Oracle's signature on the refund message\n     *\n     * Oracle signs: \"REFUND\" + issueHash + amount\n     *\n     * This proves:\n     * - Issue was closed without merged PR, OR\n     * - Maintainer requested cancellation, OR\n     * - Some other condition requiring refund\n     * - Oracle committed to the exact refund amount\n     */\n    function refund(int amount, datasig oracleSig) {\n        // Construct the refund message\n        // Format: \"REFUND\" + issueHash + amount (8 bytes LE)\n        bytes message = bytes('REFUND') + issueHash + bytes8(amount);\n\n        // Verify oracle signed this message\n        require(checkDataSig(oracleSig, message, oraclePubkey));\n\n        // Ensure exactly one output\n        require(tx.outputs.length == 1);\n\n        // Verify output pays to maintainer's address\n        bytes25 maintainerLock = new LockingBytecodeP2PKH(maintainerPKH);\n        require(tx.outputs[0].lockingBytecode == maintainerLock);\n\n        // Verify output is exactly the signed amount\n        require(tx.outputs[0].value == amount);\n    }\n\n    /**\n     * Timeout - Automatic refund after expiry\n     *\n     * No oracle signature needed - anyone can trigger this after locktime\n     *\n     * This ensures:\n     * - If oracle goes offline, funds aren't stuck forever\n     * - Maintainer can always recover funds after timeout period\n     * - No trust required for refunds after expiry\n     */\n    function timeout() {\n        // Check that locktime has passed\n        require(tx.time >= locktime);\n\n        // Ensure exactly one output (all funds returned to maintainer)\n        require(tx.outputs.length == 1);\n\n        // Verify output pays to maintainer's address\n        bytes25 maintainerLock = new LockingBytecodeP2PKH(maintainerPKH);\n        require(tx.outputs[0].lockingBytecode == maintainerLock);\n    }\n}\n",
+  "debug": {
+    "bytecode": "5479009c6308434f4d504c455445537a7e55797e567958807e57797e587958807e597a7c7bbb0376a914547a7e0288ac7e567900a063c4529d00cd788800cc55799d0376a91456797e0288ac7e51cd788851cc58799d7567c4519d00cd788800cc55799d686d6d6d7551675479519c6306524546554e44537a7e557958807e567a7c7bbbc4519d0376a9147c7e0288ac7e00cd8800cc537a9c777767547a529d537ab175c4519d0376a9147b7e0288ac7e00cd8777776868",
+    "sourceMap": "50:4:94:5;;;;;59:30:59:40;60:14:60:23;;59:24:::1;61:14:61:28:0;;59:24:::1;62:21:62:38:0;;:14::39:1;;59:24;63:14:63:26:0;;59:24:::1;64:21:64:37:0;;:14::38:1;;59:24;67:29:67::0;;:40::47;:49::61;:8::64:1;74:34:74:74:0;:59::73;;:34::74:1;;;76:12:76:28:0;;:31::32;:12:::1;:34:88:9:0;78:20:78:37;:41::42;:12::44:1;81:31:81:32:0;:20::49:1;:53::68:0;:12::70:1;82:31:82:32:0;:20::39:1;:43::60:0;;:12::62:1;85:36:85:74:0;:61::73;;:36::74:1;;;86:31:86:32:0;:20::49:1;:53::66:0;:12::68:1;87:31:87:32:0;:20::39:1;:43::59:0;;:12::61:1;76:34:88:9;88:15:93::0;90:20:90:37;:41::42;:12::44:1;91:31:91:32:0;:20::49:1;:53::68:0;:12::70:1;92:31:92:32:0;:20::39:1;:43::60:0;;:12::62:1;88:15:93:9;50:4:94:5;;;;;;110::127::0;;;;;113:30:113:38;:42::51;;:24:::1;:61::67:0;;:54::68:1;;:24;116:29:116:38:0;;:40::47;:49::61;:8::64:1;119:16:119:33:0;:37::38;:8::40:1;122:33:122:72:0;:58::71;:33::72:1;;;123:27:123:28:0;:16::45:1;:8::65;126:27:126:28:0;:16::35:1;:39::45:0;;:8::47:1;110:4:127:5;;;139::149::0;;;;141:27:141:35;;:8::37:1;;144:16:144:33:0;:37::38;:8::40:1;147:33:147:72:0;:58::71;:33::72:1;;;148:27:148:28:0;:16::45:1;:8::65;139:4:149:5;;20:0:150:1;",
+    "logs": [],
+    "requires": [
+      {
+        "ip": 33,
+        "line": 67
+      },
+      {
+        "ip": 47,
+        "line": 78
+      },
+      {
+        "ip": 51,
+        "line": 81
+      },
+      {
+        "ip": 56,
+        "line": 82
+      },
+      {
+        "ip": 66,
+        "line": 86
+      },
+      {
+        "ip": 71,
+        "line": 87
+      },
+      {
+        "ip": 76,
+        "line": 90
+      },
+      {
+        "ip": 80,
+        "line": 91
+      },
+      {
+        "ip": 85,
+        "line": 92
+      },
+      {
+        "ip": 111,
+        "line": 116
+      },
+      {
+        "ip": 114,
+        "line": 119
+      },
+      {
+        "ip": 122,
+        "line": 123
+      },
+      {
+        "ip": 128,
+        "line": 126
+      },
+      {
+        "ip": 137,
+        "line": 141
+      },
+      {
+        "ip": 141,
+        "line": 144
+      },
+      {
+        "ip": 150,
+        "line": 148
+      }
+    ]
+  },
+  "compiler": {
+    "name": "cashc",
+    "version": "0.12.0"
+  },
+  "updatedAt": "2026-01-27T09:56:58.073Z"
+}

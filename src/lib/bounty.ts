@@ -446,9 +446,11 @@ export async function completeBountyPayout(
 /**
  * Refund a bounty - return funds to maintainer (oracle-signed)
  *
+ * Consolidates all contract UTXOs and returns total minus fee to maintainer.
+ *
  * @param bounty - The Bounty record from the database
  * @param network - Network to use (mainnet or testnet3)
- * @returns Transaction result with txid and hex
+ * @returns Tuple of [TransactionResult, refundedAmount]
  */
 export async function refundBountyToMaintainer(
   bounty: Bounty,
@@ -460,15 +462,12 @@ export async function refundBountyToMaintainer(
 
   const { config, contract } = setupContractFromBounty(bounty, network);
 
-  const amount =
-    (bounty.fundedAmount ?? bounty.amount) - (bounty.feeAmount ?? BigInt(0));
-
-  const result = await refundBounty(
+  // refundBounty now calculates the amount from actual UTXOs
+  const { transaction, refundedAmount } = await refundBounty(
     contract,
     config.provider,
     bounty.maintainerAddress,
     bounty.issueHash,
-    amount,
     config.oracleKeys.privateKey,
   );
 
@@ -481,29 +480,31 @@ export async function refundBountyToMaintainer(
   });
 
   console.log(`✅ Bounty ${bounty.id} refunded to ${bounty.maintainerAddress}`);
-  console.log(`   TX: ${result.txid}`);
+  console.log(`   TX: ${transaction.txid}`);
 
-  return [result, amount];
+  return [transaction, refundedAmount];
 }
 
 /**
  * Timeout a bounty - automatic refund after locktime expires
  *
+ * Consolidates all contract UTXOs and returns total minus fee to maintainer.
+ *
  * @param bounty - The Bounty record from the database
  * @param network - Network to use (mainnet or testnet3)
- * @returns Transaction result with txid and hex
+ * @returns Tuple of [TransactionResult, refundedAmount]
  */
 export async function timeoutBountyRefund(
   bounty: Bounty,
   network: Network,
-): Promise<TransactionResult> {
+): Promise<[TransactionResult, bigint]> {
   if (bounty.status !== "ACTIVE") {
     throw new Error(`Cannot timeout bounty with status: ${bounty.status}`);
   }
 
   const { config, contract } = setupContractFromBounty(bounty, network);
 
-  const result = await timeoutBounty(
+  const { transaction, refundedAmount } = await timeoutBounty(
     contract,
     config.provider,
     bounty.maintainerAddress,
@@ -519,11 +520,11 @@ export async function timeoutBountyRefund(
   });
 
   console.log(
-    `✅ Bounty ${bounty.id} expired, refunded to ${bounty.maintainerAddress}`,
+    `✅ Bounty ${bounty.id} expired, refunded to ${bounty.maintainerAddress}`
   );
-  console.log(`   TX: ${result.txid}`);
+  console.log(`   TX: ${transaction.txid}`);
 
-  return result;
+  return [transaction, refundedAmount];
 }
 
 /**
