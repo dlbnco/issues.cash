@@ -12,6 +12,7 @@ import { prisma } from "@/lib/prisma";
 import {
   getMostRecentBountyByIssueNumber,
   completeBountyPayout,
+  updateBountyComments,
 } from "@/lib/bounty";
 import { createOrUpdateAttempt } from "@/lib/attempt";
 import { parseClaimCommand, validateAddressForNetwork } from "@/lib/commands";
@@ -230,6 +231,9 @@ async function handleMergeRequestOpenedOrEdited(
     }
   }
 
+  // Update the issue note with attempts table
+  await updateBountyComments(bounty.id);
+
   return {
     success: true,
     message: `Claim registered for issue #${claimCommand.issueNumber}`,
@@ -293,6 +297,9 @@ async function handleMergeRequestMerged(
         settlementTxId: transaction.txid,
       },
     });
+
+    // Update the issue note with attempts table
+    await updateBountyComments(bounty.id);
 
     // Post completion message
     if (credentials.accessToken) {
@@ -379,6 +386,9 @@ async function handleMergeRequestClosed(
     where: { id: attempt.id },
     data: { status: AttemptStatus.REJECTED },
   });
+
+  // Update the issue note with attempts table
+  await updateBountyComments(attempt.bounty.id);
 
   // Post rejection message
   if (credentials.accessToken) {
