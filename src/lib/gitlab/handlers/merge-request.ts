@@ -12,6 +12,7 @@ import { prisma } from "@/lib/prisma";
 import {
   getMostRecentBountyByIssueNumber,
   completeBountyPayout,
+  updateBountyComments,
 } from "@/lib/bounty";
 import { createOrUpdateAttempt } from "@/lib/attempt";
 import { parseClaimCommand, validateAddressForNetwork } from "@/lib/commands";
@@ -33,7 +34,7 @@ import { fromPrismaToElectrumNetwork } from "@/lib/network";
  */
 export async function handleMergeRequest(
   payload: GitLabMergeRequestEvent,
-  credentials: GitLabCredentials
+  credentials: GitLabCredentials,
 ): Promise<WebhookResponse> {
   const { object_attributes: mr, project } = payload;
   const action = mr.action;
@@ -41,7 +42,7 @@ export async function handleMergeRequest(
   const instanceUrl = extractInstanceUrl(project.web_url);
   const mrUrl = constructMergeRequestUrl(project.web_url, mr.iid);
   const { owner, name: repoName } = parsePathWithNamespace(
-    project.path_with_namespace
+    project.path_with_namespace,
   );
 
   // Route based on action
@@ -55,7 +56,7 @@ export async function handleMergeRequest(
         instanceUrl,
         mrUrl,
         owner,
-        repoName
+        repoName,
       );
 
     case "merge":
@@ -64,7 +65,7 @@ export async function handleMergeRequest(
         credentials,
         instanceUrl,
         owner,
-        repoName
+        repoName,
       );
 
     case "close":
@@ -73,7 +74,7 @@ export async function handleMergeRequest(
         credentials,
         instanceUrl,
         owner,
-        repoName
+        repoName,
       );
 
     default:
@@ -90,7 +91,7 @@ async function handleMergeRequestOpenedOrEdited(
   instanceUrl: string,
   mrUrl: string,
   owner: string,
-  repoName: string
+  repoName: string,
 ): Promise<WebhookResponse> {
   const { object_attributes: mr, project, user } = payload;
   const mrBody = mr.description?.trim() || "";
@@ -112,7 +113,7 @@ async function handleMergeRequestOpenedOrEdited(
         project.id,
         mrNumber,
         messages.invalidClaimCommandError(claimCommand.error!),
-        credentials.accessToken
+        credentials.accessToken,
       );
     }
 
@@ -126,7 +127,7 @@ async function handleMergeRequestOpenedOrEdited(
   const bounty = await getMostRecentBountyByIssueNumber(
     owner,
     repoName,
-    claimCommand.issueNumber!
+    claimCommand.issueNumber!,
   );
 
   if (!bounty) {
@@ -136,7 +137,7 @@ async function handleMergeRequestOpenedOrEdited(
         project.id,
         mrNumber,
         messages.noBountyFoundError(claimCommand.issueNumber!),
-        credentials.accessToken
+        credentials.accessToken,
       );
     }
 
@@ -156,9 +157,9 @@ async function handleMergeRequestOpenedOrEdited(
         messages.bountyNotActiveError(
           claimCommand.issueNumber!,
           bounty.status,
-          bounty.contractAddress
+          bounty.contractAddress,
         ),
-        credentials.accessToken
+        credentials.accessToken,
       );
     }
 
@@ -172,7 +173,7 @@ async function handleMergeRequestOpenedOrEdited(
   const network = fromPrismaToElectrumNetwork(bounty.network);
   const addressValidation = validateAddressForNetwork(
     claimCommand.contributorAddress!,
-    network
+    network,
   );
 
   if (!addressValidation.valid) {
@@ -184,9 +185,9 @@ async function handleMergeRequestOpenedOrEdited(
         messages.networkMismatchError(
           network,
           network === "mainnet" ? "bitcoincash:" : "bchtest:",
-          addressValidation.error!
+          addressValidation.error!,
         ),
-        credentials.accessToken
+        credentials.accessToken,
       );
     }
 
@@ -218,7 +219,7 @@ async function handleMergeRequestOpenedOrEdited(
         contributorAddress: claimCommand.contributorAddress!,
         contractAddress: bounty.contractAddress,
       }),
-      credentials.accessToken
+      credentials.accessToken,
     );
 
     // Store comment ID
@@ -229,6 +230,8 @@ async function handleMergeRequestOpenedOrEdited(
       });
     }
   }
+
+  await updateBountyComments(bounty.id);
 
   return {
     success: true,
@@ -244,7 +247,7 @@ async function handleMergeRequestMerged(
   credentials: GitLabCredentials,
   instanceUrl: string,
   owner: string,
-  repoName: string
+  repoName: string,
 ): Promise<WebhookResponse> {
   const { object_attributes: mr, project, user } = payload;
   const mrNumber = mr.iid;
@@ -282,7 +285,7 @@ async function handleMergeRequestMerged(
     const { transaction, commission } = await completeBountyPayout(
       bounty,
       attempt.contributorAddress,
-      network
+      network,
     );
 
     // Update attempt status
@@ -293,6 +296,8 @@ async function handleMergeRequestMerged(
         settlementTxId: transaction.txid,
       },
     });
+
+    await updateBountyComments(bounty.id);
 
     // Post completion message
     if (credentials.accessToken) {
@@ -317,7 +322,7 @@ async function handleMergeRequestMerged(
           mrNumber,
           attempt.commentId,
           completionMessage,
-          credentials.accessToken
+          credentials.accessToken,
         );
       } else {
         await postMergeRequestNote(
@@ -325,7 +330,7 @@ async function handleMergeRequestMerged(
           project.id,
           mrNumber,
           completionMessage,
-          credentials.accessToken
+          credentials.accessToken,
         );
       }
     }
@@ -351,7 +356,7 @@ async function handleMergeRequestClosed(
   credentials: GitLabCredentials,
   instanceUrl: string,
   owner: string,
-  repoName: string
+  repoName: string,
 ): Promise<WebhookResponse> {
   const { object_attributes: mr, project } = payload;
   const mrNumber = mr.iid;
@@ -380,6 +385,8 @@ async function handleMergeRequestClosed(
     data: { status: AttemptStatus.REJECTED },
   });
 
+  await updateBountyComments(attempt.bounty.id);
+
   // Post rejection message
   if (credentials.accessToken) {
     const rejectionMessage = messages.claimRejectedMessage({
@@ -393,7 +400,7 @@ async function handleMergeRequestClosed(
         mrNumber,
         attempt.commentId,
         rejectionMessage,
-        credentials.accessToken
+        credentials.accessToken,
       );
     } else {
       await postMergeRequestNote(
@@ -401,7 +408,7 @@ async function handleMergeRequestClosed(
         project.id,
         mrNumber,
         rejectionMessage,
-        credentials.accessToken
+        credentials.accessToken,
       );
     }
   }
