@@ -82,15 +82,18 @@ export function addressToPKH(address: string): Buffer {
  * Convert PKH to BCH address
  */
 export function pkhToAddress(pkh: Buffer | string, network: Network): string {
-  const pkhString = Buffer.isBuffer(pkh) ? pkh.toString("hex") : pkh;
-  const decoded = decodeCashAddress(pkhString);
-  if (typeof decoded === "string")
-    throw new Error("Invalid CashAddress payload");
+  // Convert to Uint8Array for libauth
+  const pkhBytes = Buffer.isBuffer(pkh)
+    ? Uint8Array.from(pkh)
+    : hexToBin(pkh);
+
+  // Directly encode the PKH as a CashAddress
   const encoded = encodeCashAddress({
     type: CashAddressType.p2pkhWithTokens,
-    payload: decoded.payload,
+    payload: pkhBytes,
     prefix: network !== "mainnet" ? "bchtest" : undefined,
   });
+
   return encoded.address;
 }
 
