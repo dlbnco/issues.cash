@@ -1,4 +1,5 @@
 import { Platform } from "@prisma/client";
+import { DUST_LIMIT } from "./constants";
 
 /**
  * Commission configuration
@@ -104,12 +105,19 @@ export function calculateCommission(
 
   // Calculate commission: (fundedAmount - txFee) * bps / 10000
   const netAmount = fundedAmount - txFee;
-  const commissionAmount = (netAmount * BigInt(globalBps)) / BigInt(10000);
+  let commissionAmount = (netAmount * BigInt(globalBps)) / BigInt(10000);
+
+  // If commission is below dust limit, give it to contributor instead
+  // (can't create an output below dust limit)
+  if (commissionAmount < DUST_LIMIT) {
+    commissionAmount = BigInt(0);
+  }
+
   const contributorAmount = netAmount - commissionAmount;
 
   return {
     commissionAmount,
-    commissionBps: globalBps,
+    commissionBps: commissionAmount > 0 ? globalBps : 0,
     contributorAmount,
     isZeroCommissionProject: false,
   };
