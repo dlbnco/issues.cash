@@ -612,7 +612,8 @@ export async function updateBountyComments(id: string): Promise<void> {
         );
         
         issueMessage = bountyCompletedMessage({
-          fundedAmount: bounty.fundedAmount ?? bounty.amount,
+          amount: bounty.amount,
+          fundedAmount: bounty.fundedAmount ?? undefined,
           contributorAmount: claimedCommission.contributorAmount,
           commissionAmount: claimedCommission.commissionAmount,
           commissionBps: claimedCommission.commissionBps,
@@ -623,6 +624,7 @@ export async function updateBountyComments(id: string): Promise<void> {
           network: fromPrismaToElectrumNetwork(bounty.network),
           prNumber: winningAttempt.prNumber,
           txId: winningAttempt.settlementTxId,
+          platform: bounty.platform,
         });
         break;
     }
@@ -691,7 +693,8 @@ export async function updateBountyComments(id: string): Promise<void> {
                 
                 prMessage = bountyCompletedMessage({
                   issueNumber: bounty.issueNumber,
-                  fundedAmount: bounty.fundedAmount ?? bounty.amount,
+                  amount: bounty.amount,
+                  fundedAmount: bounty.fundedAmount ?? undefined,
                   contributorAmount: mrCommission.contributorAmount,
                   commissionAmount: mrCommission.commissionAmount,
                   commissionBps: mrCommission.commissionBps,
@@ -701,6 +704,7 @@ export async function updateBountyComments(id: string): Promise<void> {
                   prNumber: attempt.prNumber,
                   txId: attempt.settlementTxId ?? "",
                   network,
+                  platform: bounty.platform,
                 });
                 break;
               case "REJECTED":
@@ -800,7 +804,8 @@ export async function updateBountyComments(id: string): Promise<void> {
                 
                 prMessage = bountyCompletedMessage({
                   issueNumber: bounty.issueNumber,
-                  fundedAmount: bounty.fundedAmount ?? bounty.amount,
+                  amount: bounty.amount,
+                  fundedAmount: bounty.fundedAmount ?? undefined,
                   contributorAmount: prCommission.contributorAmount,
                   commissionAmount: prCommission.commissionAmount,
                   commissionBps: prCommission.commissionBps,
@@ -810,6 +815,7 @@ export async function updateBountyComments(id: string): Promise<void> {
                   prNumber: attempt.prNumber,
                   txId: attempt.settlementTxId ?? "",
                   network,
+                  platform: bounty.platform,
                 });
                 break;
               case "REJECTED":

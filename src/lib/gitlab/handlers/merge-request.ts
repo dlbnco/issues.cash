@@ -24,7 +24,7 @@ import {
   extractInstanceUrl,
 } from "../api";
 import * as messages from "@/lib/messages";
-import { AttemptStatus, BountyStatus } from "@prisma/client";
+import { AttemptStatus, BountyStatus, Platform } from "@prisma/client";
 import type { WebhookResponse } from "@/lib/webhooks/types";
 import type { GitLabCredentials } from "../verify";
 import { fromPrismaToElectrumNetwork } from "@/lib/network";
@@ -303,7 +303,8 @@ async function handleMergeRequestMerged(
     if (credentials.accessToken) {
       const completionMessage = messages.bountyCompletedMessage({
         issueNumber: bounty.issueNumber,
-        fundedAmount: bounty.fundedAmount ?? bounty.amount,
+        amount: bounty.amount,
+        fundedAmount: bounty.fundedAmount ?? undefined,
         contributorAmount: commission.contributorAmount,
         commissionAmount: commission.commissionAmount,
         commissionBps: commission.commissionBps,
@@ -313,6 +314,7 @@ async function handleMergeRequestMerged(
         prNumber: mrNumber,
         txId: transaction.txid,
         network,
+        platform: Platform.GITLAB,
       });
 
       if (attempt.commentId) {

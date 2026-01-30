@@ -1,4 +1,4 @@
-import { Attempt, BountyStatus } from "@prisma/client";
+import { Attempt, BountyStatus, Platform } from "@prisma/client";
 import { Network } from "cashscript";
 import {
   formatBCH,
@@ -317,8 +317,10 @@ ${CREDITS}`;
 
 export interface BountyCompletedParams {
   issueNumber: number;
-  /** Total funded amount (bounty amount) */
-  fundedAmount: number | bigint;
+  /** Original bounty amount from command */
+  amount: number | bigint;
+  /** Actual funded amount (may be higher than amount) */
+  fundedAmount?: number | bigint;
   /** Amount the contributor receives after commission */
   contributorAmount: number | bigint;
   /** Commission amount in satoshis */
@@ -332,16 +334,20 @@ export interface BountyCompletedParams {
   prNumber: number;
   txId: string;
   network: Network;
+  /** Platform for correct PR/MR link format */
+  platform: Platform;
 }
 
 function formatCommissionBreakdown(params: {
-  fundedAmount: number | bigint;
+  amount: number | bigint;
+  fundedAmount?: number | bigint;
   contributorAmount: number | bigint;
   commissionAmount: number | bigint;
   commissionBps: number;
   isZeroCommissionProject: boolean;
 }): string {
   const {
+    amount,
     fundedAmount,
     contributorAmount,
     commissionAmount,
@@ -350,28 +356,44 @@ function formatCommissionBreakdown(params: {
   } = params;
 
   const commissionAmountNum = Number(commissionAmount);
+  const amountNum = BigInt(amount);
+  const fundedNum = fundedAmount ? BigInt(fundedAmount) : amountNum;
+  const bonusAmount = fundedNum > amountNum ? fundedNum - amountNum : BigInt(0);
 
   // No commission (globally disabled)
   if (commissionBps === 0 && !isZeroCommissionProject) {
-    return `- **Amount:** ${formatBCH(contributorAmount)} BCH`;
+    let result = `- **Bounty amount:** ${formatBCH(amount)} BCH`;
+    if (bonusAmount > 0) {
+      result += `\n- **Bonus:** ${formatBCH(bonusAmount)} BCH`;
+    }
+    return result;
   }
 
   // Zero commission (founding partner)
   if (isZeroCommissionProject) {
-    return `- **Bounty amount:** ${formatBCH(fundedAmount)} BCH
-- **Commission:** 0 BCH (Founding Partner)`;
+    let result = `- **Bounty amount:** ${formatBCH(amount)} BCH`;
+    if (bonusAmount > 0) {
+      result += `\n- **Bonus:** ${formatBCH(bonusAmount)} BCH`;
+    }
+    result += `\n- **Commission:** 0 BCH (Founding Partner)`;
+    return result;
   }
 
   // With commission
   const commissionPercent = (commissionBps / 100).toFixed(commissionBps % 100 === 0 ? 0 : 1);
-  return `- **Bounty amount:** ${formatBCH(fundedAmount)} BCH
-- **Commission:** ${formatBCH(commissionAmountNum)} BCH (${commissionPercent}%)
-- **You receive:** ${formatBCH(contributorAmount)} BCH`;
+  let result = `- **Bounty amount:** ${formatBCH(amount)} BCH`;
+  if (bonusAmount > 0) {
+    result += `\n- **Bonus:** ${formatBCH(bonusAmount)} BCH`;
+  }
+  result += `\n- **Commission:** ${formatBCH(commissionAmountNum)} BCH (${commissionPercent}%)`;
+  result += `\n- **You receive:** ${formatBCH(contributorAmount)} BCH`;
+  return result;
 }
 
 export function bountyCompletedMessage(params: BountyCompletedParams): string {
   const {
     issueNumber,
+    amount,
     fundedAmount,
     contributorAmount,
     commissionAmount,
@@ -382,15 +404,21 @@ export function bountyCompletedMessage(params: BountyCompletedParams): string {
     prNumber,
     txId,
     network,
+    platform,
   } = params;
 
   const commissionBreakdown = formatCommissionBreakdown({
+    amount,
     fundedAmount,
     contributorAmount,
     commissionAmount,
     commissionBps,
     isZeroCommissionProject,
   });
+
+  // GitLab uses "MR" with ! prefix, GitHub uses "PR" with # prefix
+  const prLabel = platform === Platform.GITLAB ? "MR" : "PR";
+  const prPrefix = platform === Platform.GITLAB ? "!" : "#";
 
   return `🎉 **Bounty Paid!**
 
@@ -400,7 +428,7 @@ Congratulations @${contributorLogin}! Your solution has been merged and the boun
 ${commissionBreakdown}
 - **Recipient:** \`${contributorAddress}\`
 - **Issue:** #${issueNumber}
-- **PR:** #${prNumber}
+- **${prLabel}:** ${prPrefix}${prNumber}
 - **Transaction:** \`${txId}\`
 
 View transaction: ${getExplorerUrl(txId, network)}
