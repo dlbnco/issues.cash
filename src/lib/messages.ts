@@ -8,7 +8,7 @@ import {
 } from "@/lib/format";
 
 const CREDITS = `---
-*Powered by [issues.cash](https://issues.cash) - Trustless bounties on Bitcoin Cash*`;
+*Powered by [issues.cash](https://issues.cash)*`;
 
 export function errorRefundPendingAttemptsFound(attempts: Attempt[]): string {
   return `❌ **Error refunding bounty**
@@ -30,7 +30,7 @@ ${error}
 export function networkMismatchError(
   network: string,
   expectedPrefix: string,
-  error: string
+  error: string,
 ): string {
   return `❌ **Address Network Mismatch**
 
@@ -380,7 +380,9 @@ function formatCommissionBreakdown(params: {
   }
 
   // With commission
-  const commissionPercent = (commissionBps / 100).toFixed(commissionBps % 100 === 0 ? 0 : 1);
+  const commissionPercent = (commissionBps / 100).toFixed(
+    commissionBps % 100 === 0 ? 0 : 1,
+  );
   let result = `- **Bounty amount:** ${formatBCH(amount)} BCH`;
   if (bonusAmount > 0) {
     result += `\n- **Bonus:** ${formatBCH(bonusAmount)} BCH`;
