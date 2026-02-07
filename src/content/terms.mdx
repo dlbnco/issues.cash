@@ -1,0 +1,98 @@
+## Welcome
+
+issues.cash is a decentralized bounty platform that connects open source maintainers with contributors.
+
+By using issues.cash, you agree to these terms.
+
+## How It Works
+
+- **Maintainers** create bounties by commenting on GitHub/GitLab issues and funding a smart contract with BCH.
+- **Contributors** claim bounties by submitting pull/merge requests and providing their BCH address.
+- **Smart contracts** hold the funds in escrow.
+- **Our oracle** verifies GitHub/GitLab events and signs transactions to release funds when a PR is merged.
+- **Refunds** happen automatically when an issue is closed without a merged PR, or after the bounty expires.
+
+## Eligibility
+
+To use issues.cash, you must:
+
+- Be of legal age in your jurisdiction
+- Have a GitHub or GitLab account
+- Have a Bitcoin Cash wallet you control
+- Not be prohibited from using cryptocurrency services under applicable law
+
+## Your Responsibilities
+
+You are responsible for:
+
+- **Your wallet security.** We never have access to your private keys. If you lose access to your wallet, we cannot recover your funds.
+- **Accurate information.** Provide correct BCH addresses. Transactions on the blockchain are irreversible.
+- **Platform compliance.** Follow GitHub's and GitLab's terms of service when using their platforms.
+- **Tax obligations.** You are responsible for any taxes owed on bounties you receive or pay.
+- **Understanding the technology.** You should be familiar with how Bitcoin Cash and smart contracts work before using this service.
+
+## Our Role
+
+We operate the oracle that connects GitHub/GitLab events to the blockchain. Here's what that means:
+
+- **We don't custody your funds.** Funds are held by smart contracts on the Bitcoin Cash blockchain, not by us.
+- **We don't mediate disputes.** The smart contract is the arbiter. If a PR (on GitHub) or MR (on GitLab) is merged, the contributor gets paid. If the issue is closed, the maintainer gets refunded.
+- **We sign transactions.** Our oracle verifies events and authorizes payouts, but the contract enforces the rules.
+- **We can't steal your funds.** The contract only allows payment to the contributor (on merge) or refund to the maintainer (on close/timeout).
+
+## Timeout Protection
+
+Every bounty has an expiration date (default: 90 days). After this date, the maintainer can reclaim their funds directly from the smart contract — no oracle signature required. This protects you even if our service goes offline.
+
+## Fees
+
+- **Commission:** We may charge a commission on successful bounty completions. The current rate (if any) is displayed when a bounty is paid. No commission is charged on refunds or timeouts.
+- **Network fees:** Bitcoin Cash transaction fees are paid from the bounty amount. These are typically very small (fractions of a cent).
+- **No hidden fees:** What you see is what you get.
+
+## Risks
+
+By using issues.cash, you acknowledge and accept these risks:
+
+- **Cryptocurrency volatility.** The value of BCH can fluctuate significantly.
+- **Smart contract risks.** While our contracts are designed to be secure, bugs in smart contracts can lead to loss of funds. Our code is open source for review.
+- **Blockchain finality.** Transactions on Bitcoin Cash are irreversible. Double-check addresses before sending.
+- **Service availability.** We strive for high availability, but the service may be interrupted. The timeout mechanism protects your funds in this case.
+- **Regulatory uncertainty.** Cryptocurrency regulations vary by jurisdiction and may change.
+
+## Prohibited Uses
+
+You may not use issues.cash for any illegal activity under applicable law.
+
+## Intellectual Property
+
+- **Your code is yours.** We claim no ownership over code you submit for bounties. Licensing is between you and the repository maintainer.
+- **Open source.** Our smart contracts and platform code are open source. Check our GitHub repository for licenses.
+
+## Limitation of Liability
+
+**issues.cash is provided "as is" without warranties of any kind.**
+
+To the maximum extent permitted by law, we are not liable for any indirect, incidental, special, consequential, or punitive damages, including loss of profits, data, or cryptocurrency.
+
+## Indemnification
+
+You agree to indemnify and hold harmless issues.cash and its operators from any claims, damages, or expenses arising from your use of the service or violation of these terms.
+
+## Changes to These Terms
+
+We may update these terms from time to time. Continued use of the service after changes constitutes acceptance of the new terms.
+
+## Termination
+
+We may suspend or terminate your access to issues.cash at any time, for any reason, without notice. This might happen if we believe you're violating these terms or applicable law.
+
+If your access is terminated, any active bounties you've funded will still be governed by their smart contracts. You can always reclaim funds after the timeout period expires.
+
+## Disputes
+
+We don't arbitrate disputes about code quality, bounty eligibility, or whether a PR/MR should have been merged.
+
+## Contact
+
+[mateus@dlbn.co](mailto:mateus@dlbn.co).

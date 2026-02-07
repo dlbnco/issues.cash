@@ -1,0 +1,84 @@
+## Introduction
+
+issues.cash is a bounty platform. This policy explains what data we collect, how we use it, and your rights regarding that data.
+
+## What We Collect
+
+### Information You Provide
+
+- **Bitcoin Cash addresses** — When you create or claim a bounty, you provide a BCH address. This is stored in our database.
+- **GitHub/GitLab username** — We receive your username from GitHub/GitLab when you interact with bounties via comments or pull requests.
+
+### Information We Receive Automatically
+
+- **GitHub/GitLab webhook data** — When you comment on issues or submit pull requests, we receive event data from GitHub/GitLab including your username, comment content, and repository information.
+- **Basic server logs** — Standard web server logs including IP addresses, timestamps, and request information. These are retained for debugging purposes.
+
+### Information We Don't Collect
+
+- **Private keys** — We never have access to your wallet's private keys.
+- **Personal identification** — We don't require or collect names, emails, phone numbers, or government IDs.
+- **Tracking cookies** — We don't use analytics or advertising trackers.
+
+## How We Use Your Data
+
+We use collected data to:
+
+- **Operate the service** — Process bounties, verify GitHub/GitLab events, and execute smart contract transactions.
+- **Display public information** — Show bounty listings, contributor profiles, and organization statistics on the website.
+- **Communicate with you** — Post bot comments on GitHub/GitLab issues and pull requests.
+- **Maintain security** — Detect and prevent abuse, fraud, and unauthorized access.
+
+## What's Public
+
+By design, certain information is public:
+
+- **Blockchain data** — All Bitcoin Cash transactions are public and permanent. Anyone can see bounty funding, payouts, and refunds on the blockchain.
+- **GitHub/GitLab activity** — Your bounty-related comments and pull requests are visible according to the repository's visibility settings.
+- **Website listings** — Active bounties, contributor statistics, and organization rankings are displayed publicly on issues.cash.
+
+## Data Storage
+
+- **Database** — We store bounty metadata, BCH addresses, and GitHub/GitLab usernames in a PostgreSQL database.
+- **Blockchain** — Transaction data is permanently stored on the Bitcoin Cash blockchain.
+- **Logs** — Server logs are retained for a limited period for security purposes.
+
+We do not sell, rent, or share your data with third parties for marketing purposes.
+
+## Third-Party Services
+
+We integrate with:
+
+- **GitHub** — For repository webhooks and bot comments. See [GitHub's Privacy Policy](https://docs.github.com/en/site-policy/privacy-policies/github-privacy-statement).
+- **GitLab** — For repository webhooks and bot comments. See [GitLab's Privacy Policy](https://about.gitlab.com/privacy/).
+- **Electrum servers** — For Bitcoin Cash blockchain access. These are public infrastructure and don't receive personal data.
+
+## Your Rights
+
+You can:
+
+- **View your data** — Your bounty activity is visible on the website and blockchain.
+- **Request deletion** — Contact us to request deletion of your data from our database. Note that blockchain transactions cannot be deleted.
+- **Opt out** — Simply don't use the service. We don't track you outside of direct interactions.
+
+## Data Retention
+
+- **Active bounties** — Data is retained while bounties are active.
+- **Completed bounties** — Historical data is retained for record-keeping and statistics.
+- **Blockchain data** — Permanent and cannot be deleted.
+
+## Security
+
+We implement reasonable security measures to protect your data:
+
+- Webhook signature verification
+- Encrypted database connections
+- Access controls on infrastructure
+
+## Changes to This Policy
+
+We may update this policy from time to time. We'll post the new policy on this page with an updated date. Continued use of the service after changes constitutes acceptance.
+
+## Contact
+
+[mateus@dlbn.co](mailto:mateus@dlbn.co).
