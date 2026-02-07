@@ -4,7 +4,7 @@ issues.cash is a bounty platform on Bitcoin Cash that allows the creation and fu
 
 A smart contract holds the bounty funds, which gets released when a solution is approved via pull request.
 
-This repository contains all the 
+This repository contains everything necessary to host the platform. It is a regular [Next.js](https://nextjs.org) project.
 
 # Bounties
 
@@ -16,29 +16,31 @@ On an issue, comment:
 /bounty <amount> --refund <address> [--expiry <days>]
 ```
 
-The bot will reply with further instructions.
+The bot will reply with a contract address and funding instructions.
 
 ### Examples
 
 ```
-# Basic bounty with default 90-day default expiry
+# Basic bounty with 90-day default expiry
 /bounty 2.35 --refund bitcoincash:qp2p3p3p3p3p3p3p3p3p3p3p3p3p3p3p3p
 
 # Custom 60-day expiry
 /bounty 1.5 --refund bitcoincash:qp2p3p3p3p3p3p3p3p3p3p3p3p3p3p3p3p --expiry 60
 ```
 
-### Details
+## Cancel a bounty
 
-- An issue can have only one bounty associated to it, unless the existing bounty is already refunded, or expired
-- Pending bounties can be deleted by simply deleting the bot reply with the bounty details. A new bounty with different details can be created following that
-- Once funded, a bounty can be refunded by closing the issue, as long as there are no open pull requests claiming it. If desired, a new bounty with new details can be created by re-opening the issue, and repeating the usual process
+If a bounty has not been funded yet, the maintainer can cancel it by commenting:
 
-# Claims
+```
+/bounty cancel
+```
+
+This deletes the pending bounty from the system. For funded bounties, close the issue instead to trigger a refund.
 
 ## Claim a bounty
 
-Create a pull request with the following in the body:
+To claim a bounty, create a pull request that solves the issue and include the following in the PR body:
 
 ```
 /claim <issue_number> --address <address>
@@ -49,6 +51,36 @@ Create a pull request with the following in the body:
 ```
 /claim 42 --address bitcoincash:qp2p3p3p3p3p3p3p3p3p3p3p3p3p3p3p3p
 ```
+
+When the PR is merged, the oracle verifies the event and releases the funds to the specified address.
+
+## Refund a bounty
+
+To refund a funded bounty, close the issue. The oracle will verify the event and return the funds to the `--refund` address specified when the bounty was created.
+
+**Note**: Refunds are blocked if there are open pull requests claiming the bounty. Close or merge the PRs first.
+
+## Expiry
+
+Each bounty has an expiry date set by the `--expiry` flag (default: 90 days). After this period:
+
+- The maintainer can reclaim the funds directly from the smart contract
+- No oracle signature is required
+- The bounty status changes to `EXPIRED`
+
+## Commission
+
+A commission may be charged on successful bounty completions (when a PR is merged):
+
+- Commission is not charged on refunds or expired bounties
+- The rate is configured by the platform operator
+- Some projects may be designated as partners with 0% commission
+
+When a bounty is claimed, the payout message will show:
+- Bounty amount
+- Network fees
+- Commission amount and rate (if applicable)
+- Final amount received by contributor
 
 # GitHub app
 
