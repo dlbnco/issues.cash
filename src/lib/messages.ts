@@ -444,14 +444,21 @@ export interface BountyRefundedParams {
   maintainerAddress: string;
   txId: string;
   network: Network;
+  reason?: "closed" | "expired";
 }
 
 export function bountyRefundedMessage(params: BountyRefundedParams): string {
-  const { issueNumber, amount, maintainerAddress, txId, network } = params;
+  const { issueNumber, amount, maintainerAddress, txId, network, reason } =
+    params;
+
+  const reasonText =
+    reason === "expired"
+      ? `The bounty for issue #${issueNumber} has expired (locktime reached) and has been automatically refunded to the maintainer.`
+      : `The bounty for issue #${issueNumber} has been refunded.`;
 
   return `🔄 **Bounty Refunded: ${formatBCH(amount)} BCH**
 
-The bounty for issue #${issueNumber} has been refunded.
+${reasonText}
 
 **Refund Details:**
 - **Amount:** ${formatBCH(amount)} BCH

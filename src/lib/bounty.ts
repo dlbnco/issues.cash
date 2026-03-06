@@ -664,6 +664,7 @@ export async function updateBountyComments(id: string): Promise<void> {
           maintainerAddress: bounty.maintainerAddress,
           txId: bounty.settlementTxId,
           network: fromPrismaToElectrumNetwork(bounty.network),
+          reason: bounty.status === "EXPIRED" ? "expired" : "closed",
         });
         break;
     }
