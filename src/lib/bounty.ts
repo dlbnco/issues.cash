@@ -27,6 +27,7 @@ import {
 import {
   bountyCompletedMessage,
   bountyFundedMessage,
+  bountyRefundedMessage,
   claimRegisteredMessage,
   claimRejectedMessage,
 } from "./messages";
@@ -471,11 +472,12 @@ export async function refundBountyToMaintainer(
     config.oracleKeys.privateKey,
   );
 
-  // Update bounty status
+  // Update bounty status and store transaction ID
   await prisma.bounty.update({
     where: { id: bounty.id },
     data: {
       status: "REFUNDED",
+      settlementTxId: transaction.txid,
     },
   });
 
@@ -511,11 +513,12 @@ export async function timeoutBountyRefund(
     bounty.locktime,
   );
 
-  // Update bounty status
+  // Update bounty status and store transaction ID
   await prisma.bounty.update({
     where: { id: bounty.id },
     data: {
       status: "EXPIRED",
+      settlementTxId: transaction.txid,
     },
   });
 
@@ -527,37 +530,62 @@ export async function timeoutBountyRefund(
   return [transaction, refundedAmount];
 }
 
+export interface ProcessExpiredResult {
+  checked: number;
+  refunded: number;
+  errors: string[];
+}
+
 /**
  * Check and process expired bounties
  * This should be run as a cron job to automatically refund expired bounties
+ *
+ * Finds all ACTIVE bounties whose locktime has passed and triggers the
+ * timeout() function on each smart contract to refund the maintainer.
+ * Updates the issue comment to show the refund status.
  */
-export async function processExpiredBounties(
-  network: Network,
-): Promise<{ checked: number; expired: number }> {
+export async function processExpiredBounties(): Promise<ProcessExpiredResult> {
   const now = Math.floor(Date.now() / 1000);
 
   // Get all active bounties that have passed their locktime
-  const expired = await prisma.bounty.findMany({
+  const expiredBounties = await prisma.bounty.findMany({
     where: {
       status: "ACTIVE",
       locktime: { lte: now },
     },
   });
 
-  let expiredCount = 0;
+  let refundedCount = 0;
+  const errors: string[] = [];
 
-  for (const bounty of expired) {
+  for (const bounty of expiredBounties) {
     try {
+      // Get the network from the bounty's stored network field
+      const network = fromPrismaToElectrumNetwork(bounty.network);
+
+      // Trigger the timeout refund on the smart contract
+      // This also updates the bounty status to EXPIRED and stores the txId
       await timeoutBountyRefund(bounty, network);
-      expiredCount++;
+
+      // Update the issue comment to show the refund
+      await updateBountyComments(bounty.id);
+
+      refundedCount++;
+      console.log(
+        `✅ Refunded expired bounty ${bounty.id} (${bounty.issueUrl})`,
+      );
     } catch (error) {
+      const errorMsg =
+        error instanceof Error ? error.message : "Unknown error";
+      errors.push(`Bounty ${bounty.id}: ${errorMsg}`);
       console.error(`Error processing expired bounty ${bounty.id}:`, error);
     }
   }
 
   return {
-    checked: expired.length,
-    expired: expiredCount,
+    checked: expiredBounties.length,
+    refunded: refundedCount,
+    errors,
   };
 }
 
@@ -625,6 +653,18 @@ export async function updateBountyComments(id: string): Promise<void> {
           prNumber: winningAttempt.prNumber,
           txId: winningAttempt.settlementTxId,
           platform: bounty.platform,
+        });
+        break;
+      case "EXPIRED":
+      case "REFUNDED":
+        if (bounty.settlementTxId == null) return;
+        issueMessage = bountyRefundedMessage({
+          issueNumber: bounty.issueNumber,
+          amount: bounty.fundedAmount ?? bounty.amount,
+          maintainerAddress: bounty.maintainerAddress,
+          txId: bounty.settlementTxId,
+          network: fromPrismaToElectrumNetwork(bounty.network),
+          reason: bounty.status === "EXPIRED" ? "expired" : "closed",
         });
         break;
     }

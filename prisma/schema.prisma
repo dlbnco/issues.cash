@@ -42,6 +42,7 @@ model Bounty {
   attempts          Attempt[]
   commentId         BigInt?
   installationId    Int?
+  settlementTxId    String?      // Transaction ID for refunds (EXPIRED/REFUNDED status)
 
   // GitLab-specific (null for GitHub bounties)
   gitlabProject     GitLabProject? @relation(fields: [gitlabProjectId], references: [id])
