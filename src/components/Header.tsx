@@ -17,6 +17,14 @@ export function Header() {
           />
         </Link>
       </div>
+      <div className="flex-none">
+        <Link
+          href="https://github.com/dlbnco/issues.cash/wiki/Getting-Started"
+          className="btn btn-ghost btn-sm"
+        >
+          Get started
+        </Link>
+      </div>
     </header>
   );
 }
