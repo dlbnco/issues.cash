@@ -28,7 +28,7 @@
     "cashc": "^0.12.0",
     "cashscript": "^0.12.0",
     "daisyui": "^5.5.14",
-    "next": "16.0.10",
+    "next": "^16",
     "octokit": "^5.0.5",
     "react": "19.2.0",
     "react-dom": "19.2.0"
