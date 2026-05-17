@@ -3,6 +3,9 @@ import { MIN_BOUNTY_BCH, MAX_BOUNTY_BCH } from "./constants";
 
 export type CommandType = "create" | "cancel";
 
+const SUPPORTED_BOUNTY_CURRENCY = "BCH";
+const KNOWN_STABLECOIN_SYMBOLS = new Set(["USDC", "USDT", "USDH", "FLEXUSD"]);
+
 export interface ParsedCommand {
   success: boolean;
   type?: CommandType;
@@ -24,6 +27,7 @@ export interface ParsedClaimCommand {
  *
  * Supported formats:
  * - /bounty 2.35 --refund bitcoincash:qp...
+ * - /bounty 2.35 BCH --refund bitcoincash:qp...
  * - /bounty 1.5 --refund bchtest:qp... --expiry 60
  * - /bounty 0.5 --refund bitcoincash:qp... --expiry 90
  */
@@ -62,6 +66,7 @@ export function parseCommand(command: string): ParsedCommand {
 
   const amountStr = tokens[0];
   const amount = parseFloat(amountStr);
+  let flagStartIndex = 1;
 
   if (isNaN(amount) || amount <= 0) {
     return {
@@ -88,11 +93,31 @@ export function parseCommand(command: string): ParsedCommand {
     };
   }
 
+  const maybeCurrency = tokens[1];
+  if (maybeCurrency && !maybeCurrency.startsWith("-")) {
+    const currency = maybeCurrency.toUpperCase();
+    flagStartIndex = 2;
+
+    if (currency !== SUPPORTED_BOUNTY_CURRENCY) {
+      if (KNOWN_STABLECOIN_SYMBOLS.has(currency)) {
+        return {
+          success: false,
+          error: `${currency} bounties are not supported yet. Please use BCH for now.`,
+        };
+      }
+
+      return {
+        success: false,
+        error: `Unsupported bounty currency: "${maybeCurrency}". Only BCH is supported right now.`,
+      };
+    }
+  }
+
   // Parse flags
   let refundAddress: string | undefined;
   let expiryDays: number = 90; // Default to 90 days
 
-  for (let i = 1; i < tokens.length; i++) {
+  for (let i = flagStartIndex; i < tokens.length; i++) {
     const token = tokens[i];
 
     if (token === "--refund" || token === "-r") {
