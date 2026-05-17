@@ -1,4 +1,4 @@
-import { isValidBCHAddress, validateAddressForNetwork } from "./commands";
+import { isValidBCHAddress, parseCommand, validateAddressForNetwork } from "./commands";
 
 // Mock @bitauth/libauth to handle ESM import issues in Jest
 jest.mock("@bitauth/libauth", () => ({
@@ -43,6 +43,26 @@ jest.mock("@bitauth/libauth", () => ({
     };
   },
 }));
+
+describe("parseCommand currency handling", () => {
+  const refundAddress = "bitcoincash:qp3wjpa3tjlj042z2wv7hahskkprgllgnsjx3ryld";
+
+  it("should allow an explicit BCH currency after the amount", () => {
+    const result = parseCommand(`/bounty 0.01 BCH --refund ${refundAddress}`);
+
+    expect(result.success).toBe(true);
+    expect(result.amount).toBe(0.01);
+    expect(result.refundAddress).toBe(refundAddress);
+  });
+
+  it("should reject stablecoin symbols instead of silently treating them as BCH", () => {
+    const result = parseCommand(`/bounty 50 USDC --refund ${refundAddress}`);
+
+    expect(result.success).toBe(false);
+    expect(result.error).toContain("USDC");
+    expect(result.error).toContain("not supported yet");
+  });
+});
 
 describe("isValidBCHAddress", () => {
   describe("valid addresses", () => {
