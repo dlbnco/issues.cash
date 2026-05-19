@@ -15,6 +15,7 @@ import { handleIssueComment } from "@/lib/github/handlers/issue/comment";
 import { handleIssueClosed } from "@/lib/github/handlers/issue/closed";
 import { handlePullRequestOpenedOrEdited } from "@/lib/github/handlers/pull-request/opened-or-edited";
 import { handlePullRequestClosed } from "@/lib/github/handlers/pull-request/closed";
+import { logger } from "@/lib/logger";
 
 /**
  * Verify GitHub webhook signature
@@ -44,7 +45,7 @@ export async function POST(request: NextRequest) {
     // Verify webhook signature
     const webhookSecret = process.env.GITHUB_WEBHOOK_SECRET;
     if (!webhookSecret) {
-      console.error("GITHUB_WEBHOOK_SECRET not configured");
+      logger.error("GITHUB_WEBHOOK_SECRET not configured", { provider: "github" });
       return NextResponse.json(
         { error: "Webhook secret not configured" },
         { status: 500 },
@@ -55,7 +56,7 @@ export async function POST(request: NextRequest) {
       process.env.NODE_ENV !== "development" &&
       !verifyGitHubSignature(payload, signature, webhookSecret)
     ) {
-      console.error("Invalid webhook signature");
+      logger.warn("Invalid webhook signature", { provider: "github", event });
       return NextResponse.json({ error: "Invalid signature" }, { status: 401 });
     }
 
@@ -70,7 +71,7 @@ export async function POST(request: NextRequest) {
       | IssuesOpenedEvent;
 
     // Log the event
-    console.log(`📨 GitHub webhook: ${event}`);
+    logger.info("GitHub webhook received", { provider: "github", event });
 
     // Route to appropriate handler
     let result: WebhookResponse;
@@ -134,7 +135,10 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(result);
   } catch (error) {
-    console.error("Webhook error:", error);
+    logger.error("GitHub webhook error", {
+      provider: "github",
+      error: (error as Error).message,
+    });
     return NextResponse.json(
       {
         success: false,

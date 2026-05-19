@@ -17,6 +17,7 @@ import { extractInstanceUrl } from "@/lib/gitlab/api";
 import { handleNoteOnIssue } from "@/lib/gitlab/handlers/note";
 import { handleIssueClosed } from "@/lib/gitlab/handlers/issue";
 import { handleMergeRequest } from "@/lib/gitlab/handlers/merge-request";
+import { logger } from "@/lib/logger";
 
 /**
  * GitLab Webhook Handler
@@ -37,7 +38,7 @@ export async function POST(request: NextRequest) {
 
     // Check for token
     if (!token) {
-      console.error("Missing X-Gitlab-Token header");
+      logger.warn("Missing X-Gitlab-Token header", { provider: "gitlab" });
       return NextResponse.json(
         { error: "Missing webhook token" },
         { status: 401 }
@@ -49,7 +50,7 @@ export async function POST(request: NextRequest) {
     try {
       data = JSON.parse(payload) as GitLabWebhookEvent;
     } catch {
-      console.error("Invalid JSON payload");
+      logger.warn("Invalid JSON payload", { provider: "gitlab" });
       return NextResponse.json(
         { error: "Invalid JSON payload" },
         { status: 400 }
@@ -59,7 +60,7 @@ export async function POST(request: NextRequest) {
     // Extract project info from payload
     const project = data.project;
     if (!project) {
-      console.error("Missing project in webhook payload");
+      logger.warn("Missing project in webhook payload", { provider: "gitlab" });
       return NextResponse.json(
         { error: "Missing project information" },
         { status: 400 }
@@ -77,9 +78,10 @@ export async function POST(request: NextRequest) {
     );
 
     if (!credentials) {
-      console.error(
-        `Invalid webhook token for project ${project.path_with_namespace}`
-      );
+      logger.warn("Invalid webhook token", {
+        provider: "gitlab",
+        project: project.path_with_namespace,
+      });
       return NextResponse.json(
         { error: "Invalid webhook token" },
         { status: 401 }
@@ -87,9 +89,11 @@ export async function POST(request: NextRequest) {
     }
 
     // Log the event
-    console.log(
-      `📨 GitLab webhook: ${event} from ${project.path_with_namespace}`
-    );
+    logger.info("GitLab webhook received", {
+      provider: "gitlab",
+      event,
+      project: project.path_with_namespace,
+    });
 
     // Route to appropriate handler
     let result: WebhookResponse;
@@ -120,7 +124,10 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(result);
   } catch (error) {
-    console.error("GitLab webhook error:", error);
+    logger.error("GitLab webhook error", {
+      provider: "gitlab",
+      error: (error as Error).message,
+    });
     return NextResponse.json(
       {
         success: false,
