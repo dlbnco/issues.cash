@@ -21,13 +21,9 @@ export async function handlePullRequestClosed(
 
   if (pull_request.merged === false) {
     try {
-      const attempt = await prisma.attempt.update({
+      const attempt = await prisma.attempt.findUnique({
         where: {
           prUrl: pull_request.html_url,
-        },
-        data: {
-          status: AttemptStatus.REJECTED,
-          updatedAt: new Date(),
         },
         include: {
           bounty: {
@@ -38,6 +34,30 @@ export async function handlePullRequestClosed(
               repoName: true,
             },
           },
+        },
+      });
+
+      if (!attempt) {
+        return {
+          success: true,
+          message: "No claim found for this PR",
+        };
+      }
+
+      if (attempt.status !== AttemptStatus.PENDING) {
+        return {
+          success: true,
+          message: `Claim already processed (status: ${attempt.status})`,
+        };
+      }
+
+      await prisma.attempt.update({
+        where: {
+          id: attempt.id,
+        },
+        data: {
+          status: AttemptStatus.REJECTED,
+          updatedAt: new Date(),
         },
       });
 
@@ -71,6 +91,13 @@ export async function handlePullRequestClosed(
         return {
           success: true,
           message: "No claim found for this merged PR",
+        };
+      }
+
+      if (attempt.status !== AttemptStatus.PENDING) {
+        return {
+          success: true,
+          message: `Claim already processed (status: ${attempt.status})`,
         };
       }
 
