@@ -11,11 +11,11 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
     assertSameOrigin(request);
     const user = await requireCurrentUser();
     const { id } = await params;
-    const { claimId } = await request.json();
-    if (!claimId) {
-      return NextResponse.json({ error: "claimId is required" }, { status: 400 });
+    const { claimId, revision } = await request.json();
+    if (typeof claimId !== "string" || !claimId || !Number.isInteger(revision) || revision < 1) {
+      return NextResponse.json({ error: "claimId and the reviewed revision are required" }, { status: 400 });
     }
-    const result = await awardWebBounty(id, claimId, user.id);
+    const result = await awardWebBounty(id, claimId, user.id, revision);
     return NextResponse.json(result);
   } catch (error) {
     return NextResponse.json(

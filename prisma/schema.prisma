@@ -169,6 +169,7 @@ model WebBounty {
   body      Json
   revision  Int              @default(1)
   creatorId String
+  cancelledAt DateTime?
   bounty    Bounty           @relation(fields: [bountyId], references: [id], onDelete: Cascade)
   creator   User             @relation(fields: [creatorId], references: [id], onDelete: Restrict)
   revisions BountyRevision[]
@@ -230,6 +231,7 @@ model SettlementAttempt {
   intent         SettlementIntent
   status         SettlementStatus @default(PENDING)
   txId           String?
+  rawTx          String?
   error          String?
   bountyId       String
   claimId        String?
@@ -238,4 +240,12 @@ model SettlementAttempt {
 
   @@index([bountyId, status])
   @@index([claimId])
+}
+
+model RateLimitBucket {
+  key       String   @id
+  count     Int
+  expiresAt DateTime
+
+  @@index([expiresAt])
 }

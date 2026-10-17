@@ -1,32 +1,4 @@
-// We test the pure helper functions extracted from web-bounty.ts
-// by reimplementing the same logic to verify correctness
-
-function assertTitle(title: string): string {
-  const trimmed = title.trim();
-  if (!trimmed || trimmed.length > 160) {
-    throw new Error("Title must be between 1 and 160 characters");
-  }
-  return trimmed;
-}
-
-function createSlug(title: string, id: string): string {
-  const words = title
-    .toLowerCase()
-    .normalize("NFKD")
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/(^-|-$)/g, "")
-    .slice(0, 72) || "bounty";
-  return `${words}-${id.slice(0, 8)}`;
-}
-
-function assertBody(body: unknown): void {
-  if (body == null || typeof body !== "object" || Array.isArray(body)) {
-    throw new Error("Bounty description is required");
-  }
-  if (Buffer.byteLength(JSON.stringify(body), "utf8") > 50_000) {
-    throw new Error("Bounty description is too large");
-  }
-}
+import { assertTitle, createSlug, assertBody } from "./web-bounty-validation";
 
 describe("assertTitle", () => {
   it("accepts valid title", () => {

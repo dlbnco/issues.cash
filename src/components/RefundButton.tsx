@@ -39,7 +39,7 @@ export function RefundButton({ bountyId }: RefundButtonProps) {
 
   return (
     <div className="space-y-2">
-      <p className="text-xs text-warning">Confirm refund. Funds will be sent to the refund address.</p>
+      <p className="text-xs text-warning">Confirm refund. Funds will be sent to the refund address and all pending claims will be rejected.</p>
       {error && <p className="text-xs text-error">{error}</p>}
       <div className="flex gap-2">
         <button disabled={saving} className="btn btn-warning btn-sm" onClick={handleRefund}>

@@ -8,7 +8,7 @@ export async function POST(request: NextRequest) {
   try {
     assertSameOrigin(request);
     const user = await requireCurrentUser();
-    const rl = checkRateLimit(`create-bounty-${user.id}`, 5, 60_000);
+    const rl = await checkRateLimit(`create-bounty-${user.id}`, 5, 60_000);
     if (!rl.allowed) {
       return NextResponse.json({ error: `Too many requests. Try again in ${Math.ceil(rl.retryAfterMs / 1000)}s` }, { status: 429 });
     }

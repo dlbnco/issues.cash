@@ -12,7 +12,7 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
     assertSameOrigin(request);
     const user = await requireCurrentUser();
     const { id } = await params;
-    const rl = checkRateLimit(`claim-${user.id}-${id}`, 10, 60_000);
+    const rl = await checkRateLimit(`claim-${user.id}-${id}`, 10, 60_000);
     if (!rl.allowed) {
       return NextResponse.json({ error: `Too many requests. Try again in ${Math.ceil(rl.retryAfterMs / 1000)}s` }, { status: 429 });
     }

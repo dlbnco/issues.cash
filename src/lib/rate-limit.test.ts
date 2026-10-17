@@ -1,43 +1,25 @@
 import { checkRateLimit } from "./rate-limit";
+import { prisma } from "./prisma";
+
+jest.mock("@/lib/prisma", () => ({ prisma: { $queryRaw: jest.fn() } }));
 
 describe("checkRateLimit", () => {
-  beforeEach(() => {
-    jest.useFakeTimers();
+  beforeEach(() => jest.clearAllMocks());
+
+  it("allows the first request and the last request within the limit", async () => {
+    for (const count of [1, 3]) {
+      jest.mocked(prisma.$queryRaw).mockResolvedValueOnce([{ count, retryAfterMs: 60_000 }]);
+      await expect(checkRateLimit("key", 3, 60_000)).resolves.toEqual({ allowed: true, retryAfterMs: 0 });
+    }
   });
 
-  afterEach(() => {
-    jest.useRealTimers();
+  it("blocks requests above the shared database count", async () => {
+    jest.mocked(prisma.$queryRaw).mockResolvedValueOnce([{ count: 4, retryAfterMs: 12_345 }]);
+    await expect(checkRateLimit("key", 3, 60_000)).resolves.toEqual({ allowed: false, retryAfterMs: 12_345 });
   });
 
-  it("allows first request", () => {
-    const result = checkRateLimit("test-key", 3, 60_000);
-    expect(result.allowed).toBe(true);
-  });
-
-  it("allows requests up to max", () => {
-    checkRateLimit("test-key-2", 3, 60_000);
-    checkRateLimit("test-key-2", 3, 60_000);
-    const third = checkRateLimit("test-key-2", 3, 60_000);
-    expect(third.allowed).toBe(true);
-  });
-
-  it("blocks after max requests", () => {
-    for (let i = 0; i < 3; i++) checkRateLimit("test-key-3", 3, 60_000);
-    const blocked = checkRateLimit("test-key-3", 3, 60_000);
-    expect(blocked.allowed).toBe(false);
-    expect(blocked.retryAfterMs).toBeGreaterThan(0);
-  });
-
-  it("resets after window expires", () => {
-    for (let i = 0; i < 3; i++) checkRateLimit("test-key-4", 3, 10_000);
-    jest.advanceTimersByTime(11_000);
-    const after = checkRateLimit("test-key-4", 3, 10_000);
-    expect(after.allowed).toBe(true);
-  });
-
-  it("uses separate keys independently", () => {
-    for (let i = 0; i < 3; i++) checkRateLimit("key-a", 3, 60_000);
-    const b = checkRateLimit("key-b", 3, 60_000);
-    expect(b.allowed).toBe(true);
+  it("fails closed when the shared database is unavailable", async () => {
+    jest.mocked(prisma.$queryRaw).mockRejectedValueOnce(new Error("Database unavailable"));
+    await expect(checkRateLimit("key", 3, 60_000)).rejects.toThrow("Database unavailable");
   });
 });

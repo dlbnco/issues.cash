@@ -1,7 +1,9 @@
 import crypto from "crypto";
+import { assertSameOrigin, verifyTelegramLogin } from "./auth";
 
-// Reimplement the verification logic for unit testing
-// without needing the full auth module (which imports next/headers)
+jest.mock("next/headers", () => ({ cookies: jest.fn() }));
+jest.mock("@/lib/prisma", () => ({ prisma: {} }));
+
 function computeTelegramHash(data: Record<string, string | number>, token: string): string {
   const checkString = Object.entries(data)
     .filter(([key]) => key !== "hash")
@@ -12,35 +14,21 @@ function computeTelegramHash(data: Record<string, string | number>, token: strin
   return crypto.createHmac("sha256", secret).update(checkString).digest("hex");
 }
 
-function verifyTelegramLogin(
-  data: { id: number; first_name: string; auth_date: number; hash: string; [key: string]: unknown },
-  botToken: string,
-): boolean {
-  if (!data.id || !data.first_name || !data.auth_date || !data.hash) return false;
-  if (Math.abs(Date.now() / 1000 - data.auth_date) > 60 * 60) return false;
-
-  const entries: Record<string, string | number> = {};
-  for (const [key, value] of Object.entries(data)) {
-    if (key !== "hash" && typeof value === "string" || typeof value === "number") {
-      entries[key] = value;
-    }
-  }
-  const expected = computeTelegramHash(entries, botToken);
-
-  const leftBuf = Buffer.from(expected, "hex");
-  const rightBuf = Buffer.from(data.hash, "hex");
-  return leftBuf.length === rightBuf.length && crypto.timingSafeEqual(leftBuf, rightBuf);
-}
-
 describe("Telegram login verification", () => {
   const BOT_TOKEN = "123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11";
+  const originalToken = process.env.TELEGRAM_BOT_TOKEN;
+  beforeEach(() => { process.env.TELEGRAM_BOT_TOKEN = BOT_TOKEN; });
+  afterEach(() => {
+    if (originalToken === undefined) delete process.env.TELEGRAM_BOT_TOKEN;
+    else process.env.TELEGRAM_BOT_TOKEN = originalToken;
+  });
 
   it("accepts valid signature", () => {
     const auth_date = Math.floor(Date.now() / 1000);
     const payload = { id: 12345678, first_name: "Alice", username: "alice123", auth_date };
     const hash = computeTelegramHash(payload, BOT_TOKEN);
 
-    expect(verifyTelegramLogin({ ...payload, hash }, BOT_TOKEN)).toBe(true);
+    expect(verifyTelegramLogin({ ...payload, hash })).toBe(true);
   });
 
   it("rejects invalid hash", () => {
@@ -48,7 +36,6 @@ describe("Telegram login verification", () => {
     expect(
       verifyTelegramLogin(
         { id: 12345678, first_name: "Alice", auth_date, hash: "deadbeef" },
-        BOT_TOKEN,
       ),
     ).toBe(false);
   });
@@ -58,14 +45,13 @@ describe("Telegram login verification", () => {
     const payload = { id: 12345678, first_name: "Alice", auth_date };
     const hash = computeTelegramHash(payload, BOT_TOKEN);
 
-    expect(verifyTelegramLogin({ ...payload, hash }, BOT_TOKEN)).toBe(false);
+    expect(verifyTelegramLogin({ ...payload, hash })).toBe(false);
   });
 
   it("rejects missing id", () => {
     expect(
       verifyTelegramLogin(
         { id: 0, first_name: "Alice", auth_date: Math.floor(Date.now() / 1000), hash: "abc" },
-        BOT_TOKEN,
       ),
     ).toBe(false);
   });
@@ -74,7 +60,6 @@ describe("Telegram login verification", () => {
     expect(
       verifyTelegramLogin(
         { id: 1, first_name: "", auth_date: Math.floor(Date.now() / 1000), hash: "abc" },
-        BOT_TOKEN,
       ),
     ).toBe(false);
   });
@@ -90,6 +75,22 @@ describe("Telegram login verification", () => {
     };
     const hash = computeTelegramHash(payload, BOT_TOKEN);
 
-    expect(verifyTelegramLogin({ ...payload, hash }, BOT_TOKEN)).toBe(true);
+    expect(verifyTelegramLogin({ ...payload, hash })).toBe(true);
+  });
+});
+
+describe("assertSameOrigin", () => {
+  it("accepts same-origin requests", () => {
+    expect(() => assertSameOrigin(new Request("https://issues.cash", {
+      headers: { origin: "https://issues.cash", host: "issues.cash" },
+    }))).not.toThrow();
+  });
+
+  it("rejects cross-site form posts and missing origins", () => {
+    for (const origin of ["https://attacker.example", ""]) {
+      expect(() => assertSameOrigin(new Request("https://issues.cash", {
+        headers: { origin, host: "issues.cash", "content-type": "text/plain" },
+      }))).toThrow("Invalid request origin");
+    }
   });
 });

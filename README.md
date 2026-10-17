@@ -82,6 +82,35 @@ When a bounty is claimed, the payout message will show:
 - Commission amount and rate (if applicable)
 - Final amount received by contributor
 
+# Standalone web bounties
+
+Use `/post` to create a bounty without a repository. Configure `TELEGRAM_BOT_USERNAME` and `TELEGRAM_BOT_TOKEN`, and register your deployed hostname with BotFather's `/setdomain` command.
+
+- Creators can refund an active bounty even when claims are pending. A successful refund rejects those claims.
+- Awards are bound to the claim revision the creator reviewed. If it changes, refresh and review again.
+- Cancelling an unfunded web bounty archives it rather than deleting its escrow parameters. The funding cron refunds recoverable deposits, including partial or delayed payments. Deposits below the transaction fee plus dust threshold remain recorded for recovery.
+- Terms and claim revision histories are visible on the bounty page.
+
+## Deployment and recovery
+
+Run `yarn prisma migrate deploy` and `yarn prisma generate` before starting the updated app. Rate limits use PostgreSQL and are shared by all application workers.
+
+Schedule both cron endpoints with `Authorization: Bearer <CRON_SECRET>`:
+
+- `/api/cron/check-pending-bounties`: detects funding and refunds cancelled web escrows.
+- `/api/cron/process-expired-bounties`: reconciles settlements older than ten minutes, processes expiry refunds, and cleans up expired rate-limit buckets.
+
+Signed settlement transactions are saved before broadcasting. Recovery rebroadcasts the same transaction, rather than creating another spend. `CONFIRMED` means the application recorded a successful broadcast; it does not imply a mined block confirmation. Legacy `SETTLING` attempts without a saved transaction or transaction ID require manual chain inspection; their error is included in the cron response and settlement record.
+
+## Tests
+
+Run `yarn test`. PostgreSQL integration tests run when `TEST_DATABASE_URL` points to a **disposable, migrated test database**:
+
+```bash
+DATABASE_URL="$TEST_DATABASE_URL" yarn prisma migrate deploy
+yarn test --runInBand
+```
+
 # GitHub app
 
 The app can be installed in any repository here: https://github.com/apps/issues-cash

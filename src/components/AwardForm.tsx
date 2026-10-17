@@ -9,7 +9,7 @@ interface AwardFormProps {
     id: string;
     status: string;
     claimant: { firstName: string; username: string | null; telegramId: bigint };
-    revisions: Array<{ payoutAddress: string; body: string; workUrl: string | null }>;
+    revisions: Array<{ revision: number; payoutAddress: string; body: string; workUrl: string | null }>;
   }>;
 }
 
@@ -24,13 +24,13 @@ export function AwardForm({ bountyId, claims }: AwardFormProps) {
   const currentRevision = selectedClaim?.revisions[0];
 
   async function handleAward() {
-    if (!selectedClaimId) return;
+    if (!selectedClaimId || !currentRevision) return;
     setSaving(true);
     setError(undefined);
     const response = await fetch(`/api/web-bounties/${bountyId}/award`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ claimId: selectedClaimId }),
+      body: JSON.stringify({ claimId: selectedClaimId, revision: currentRevision.revision }),
     });
     const result = await response.json();
     if (!response.ok) {

@@ -1,37 +1,30 @@
-const rateLimits = new Map<string, { count: number; resetAt: number }>();
+import { prisma } from "@/lib/prisma";
 
 export interface RateLimitResult {
   allowed: boolean;
   retryAfterMs: number;
 }
 
-export function checkRateLimit(
+export async function checkRateLimit(
   key: string,
   maxRequests: number,
   windowMs: number,
-): RateLimitResult {
-  const now = Date.now();
-  const entry = rateLimits.get(key);
-
-  if (!entry || now > entry.resetAt) {
-    rateLimits.set(key, { count: 1, resetAt: now + windowMs });
-    return { allowed: true, retryAfterMs: 0 };
-  }
-
-  if (entry.count >= maxRequests) {
-    return { allowed: false, retryAfterMs: entry.resetAt - now };
-  }
-
-  entry.count += 1;
-  return { allowed: true, retryAfterMs: 0 };
-}
-
-// Cleanup old entries every 5 minutes
-if (typeof setInterval !== "undefined" && process.env.NODE_ENV !== "test") {
-  setInterval(() => {
-    const now = Date.now();
-    for (const [key, entry] of rateLimits) {
-      if (now > entry.resetAt) rateLimits.delete(key);
-    }
-  }, 5 * 60 * 1000);
+): Promise<RateLimitResult> {
+  // A single atomic upsert shares limits across workers and server instances.
+  // Database time prevents clock skew between application servers.
+  const [bucket] = await prisma.$queryRaw<{ count: number; retryAfterMs: number }[]>`
+    INSERT INTO "RateLimitBucket" ("key", "count", "expiresAt")
+    VALUES (${key}, 1, CURRENT_TIMESTAMP + ${windowMs} * INTERVAL '1 millisecond')
+    ON CONFLICT ("key") DO UPDATE SET
+      "count" = CASE WHEN "RateLimitBucket"."expiresAt" <= CURRENT_TIMESTAMP
+        THEN 1 ELSE LEAST("RateLimitBucket"."count" + 1, ${maxRequests + 1}) END,
+      "expiresAt" = CASE WHEN "RateLimitBucket"."expiresAt" <= CURRENT_TIMESTAMP
+        THEN CURRENT_TIMESTAMP + ${windowMs} * INTERVAL '1 millisecond'
+        ELSE "RateLimitBucket"."expiresAt" END
+    RETURNING "count", CEIL(EXTRACT(EPOCH FROM ("expiresAt" - CURRENT_TIMESTAMP)) * 1000)::integer AS "retryAfterMs"
+  `;
+  return {
+    allowed: bucket.count <= maxRequests,
+    retryAfterMs: bucket.count <= maxRequests ? 0 : Math.max(0, bucket.retryAfterMs),
+  };
 }

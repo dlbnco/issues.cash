@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
+  assertSameOrigin,
   createTelegramSession,
   sessionCookie,
   type TelegramLoginData,
@@ -8,6 +9,7 @@ import {
 
 export async function POST(request: NextRequest) {
   try {
+    assertSameOrigin(request);
     const data = (await request.json()) as TelegramLoginData;
     if (!verifyTelegramLogin(data)) {
       return NextResponse.json({ error: "Invalid Telegram login" }, { status: 401 });

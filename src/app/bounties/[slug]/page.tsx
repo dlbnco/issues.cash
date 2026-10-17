@@ -24,9 +24,9 @@ export default async function WebBountyPage({ params }: PageProps) {
   const [bounty, user] = await Promise.all([getWebBountyBySlug(slug), getCurrentUser()]);
   if (!bounty?.webBounty) notFound();
   const isCreator = user?.id === bounty.webBounty.creatorId;
-  if (bounty.status === "PENDING_FUNDING" && !isCreator) notFound();
+  if ((bounty.status === "PENDING_FUNDING" || bounty.webBounty.cancelledAt) && !isCreator) notFound();
   const total = bounty.amount + (bounty.feeAmount ?? BigInt(0));
-  const isActive = bounty.status === "ACTIVE";
+  const isActive = bounty.status === "ACTIVE" && !bounty.webBounty.cancelledAt;
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -43,22 +43,29 @@ export default async function WebBountyPage({ params }: PageProps) {
           <article className="rounded-xl border border-base-300 bg-base-100 p-5 sm:p-7">
             <RichTextDisplay value={bounty.webBounty.body} />
             <p className="mt-8 text-xs text-base-content/55">Terms revision {bounty.webBounty.revision}. Previous revisions remain visible to claimants.</p>
+            {bounty.webBounty.revisions.length > 1 && (
+              <details className="mt-4">
+                <summary className="cursor-pointer text-sm">Terms history</summary>
+                {bounty.webBounty.revisions.map((revision) => (
+                  <section key={revision.id} className="mt-4 border-t border-base-300 pt-4">
+                    <p className="text-xs text-base-content/55">Revision {revision.revision} · {revision.createdAt.toISOString()}</p>
+                    <h3 className="my-2 font-semibold">{revision.title}</h3>
+                    <RichTextDisplay value={revision.body} />
+                  </section>
+                ))}
+              </details>
+            )}
           </article>
           <aside className="space-y-4 rounded-xl border border-base-300 bg-base-100 p-5 text-sm">
             <div><p className="text-base-content/55">Reward</p><p className="mt-1 text-lg font-semibold text-success">{formatBCH(bounty.amount, { symbol: true })}</p></div>
             <div><p className="text-base-content/55">Expires</p><p className="mt-1">{new Date(bounty.locktime * 1000).toLocaleString()}</p></div>
-            {bounty.status === "PENDING_FUNDING" && isCreator && <>
+            {bounty.webBounty.cancelledAt && <p className="text-warning">Cancelled. Do not fund this escrow. Any recoverable deposits will be refunded automatically.</p>}
+            {bounty.status === "PENDING_FUNDING" && isCreator && !bounty.webBounty.cancelledAt && <>
               <div><p className="text-base-content/55">Fund this escrow</p><p className="mt-1 break-all font-mono text-xs">{bounty.contractAddress}</p></div>
               <div><p className="text-base-content/55">Send exactly</p><p className="mt-1 font-semibold">{formatBCH(total, { symbol: true })}</p></div>
               <p className="text-xs text-warning">This bounty becomes public after its escrow confirms.</p>
             </>}
-            {isActive && isCreator && (
-              bounty.claims.filter((c) => c.status === "PENDING").length === 0 ? (
-                <RefundButton bountyId={bounty.id} />
-              ) : (
-                <p className="text-xs text-warning">Refund is available once all claims are resolved.</p>
-              )
-            )}
+            {isActive && isCreator && <RefundButton bountyId={bounty.id} />}
           </aside>
         </div>
         {isActive && isCreator && bounty.claims.some((c) => c.status === "PENDING") && (
@@ -72,7 +79,7 @@ export default async function WebBountyPage({ params }: PageProps) {
                   id: c.id,
                   status: c.status,
                   claimant: { firstName: c.claimant.firstName, username: c.claimant.username, telegramId: c.claimant.telegramId },
-                  revisions: c.revisions.map((r) => ({ payoutAddress: r.payoutAddress, body: r.body, workUrl: r.workUrl })),
+                  revisions: c.revisions.map((r) => ({ revision: r.revision, payoutAddress: r.payoutAddress, body: r.body, workUrl: r.workUrl })),
                 }))}
               />
             </div>
@@ -93,6 +100,7 @@ export default async function WebBountyPage({ params }: PageProps) {
               return <article key={claim.id} className="rounded-lg border border-base-300 bg-base-100 p-4">
                 <div className="flex items-center justify-between gap-3"><strong>{claimantName(claim.claimant)}</strong><span className="font-mono text-xs text-base-content/55">{claim.status.toLowerCase()}</span></div>
                 {revision && <><p className="mt-3 whitespace-pre-wrap text-sm">{revision.body}</p>{revision.workUrl && <a className="mt-3 inline-block text-sm link link-primary" href={revision.workUrl} target="_blank" rel="noreferrer">View work</a>}</>}
+                {claim.revisions.length > 1 && <details className="mt-3 text-sm"><summary className="cursor-pointer">Claim history</summary>{claim.revisions.slice(1).map((previous) => <div key={previous.id} className="mt-3 border-t border-base-300 pt-3"><p className="text-xs text-base-content/55">Revision {previous.revision} · {previous.createdAt.toISOString()}</p><p className="mt-2 whitespace-pre-wrap">{previous.body}</p>{previous.workUrl && <a href={previous.workUrl} className="link link-primary" target="_blank" rel="noreferrer">View work</a>}</div>)}</details>}
               </article>;
             })}
             {!bounty.claims.length && <p className="text-sm text-base-content/55">No claims yet.</p>}

@@ -40,6 +40,7 @@ export async function getAllBounties(options?: {
 
   const bounties = await prisma.bounty.findMany({
     where: {
+      OR: [{ webBounty: null }, { webBounty: { cancelledAt: null } }],
       ...(status ? { status: { in: status } } : {}),
       ...(network ? { network } : {}),
     },
@@ -79,6 +80,7 @@ export async function getBountiesCount(options?: {
   const { status, network } = options ?? {};
   return prisma.bounty.count({
     where: {
+      OR: [{ webBounty: null }, { webBounty: { cancelledAt: null } }],
       ...(status ? { status: { in: status } } : {}),
       ...(network ? { network } : {}),
     },
