@@ -58,7 +58,7 @@ export interface CreateBountyParams {
 
 export interface BountyInfo {
   id: string;
-  issueUrl: string;
+  issueUrl: string | null;
   issueHash: string;
   contractAddress: string;
   maintainerAddress: string;
@@ -234,12 +234,23 @@ export async function checkPendingBounties(): Promise<{
           },
         });
 
+        if (bounty.platform === Platform.WEB) {
+          fundedCount++;
+          continue;
+        }
+        if (bounty.issueNumber == null || bounty.repoOwner == null || bounty.repoName == null) {
+          throw new Error("Repository metadata is required for external bounty updates");
+        }
+        const issueNumber = bounty.issueNumber;
+        const repoOwner = bounty.repoOwner;
+        const repoName = bounty.repoName;
+
         const message = bountyFundedMessage({
           amount: bounty.amount,
           fundedAmount: balance.confirmed,
           contractAddress: bounty.contractAddress,
           expiryDate: bounty.locktime,
-          issueNumber: bounty.issueNumber,
+          issueNumber,
         });
 
         let newCommentId: number | bigint | undefined;
@@ -257,7 +268,7 @@ export async function checkPendingBounties(): Promise<{
                 newCommentId = await postIssueNote(
                   gitlabProject.instanceUrl,
                   gitlabProject.projectId,
-                  bounty.issueNumber,
+                  issueNumber,
                   message,
                   gitlabProject.accessToken
                 );
@@ -265,7 +276,7 @@ export async function checkPendingBounties(): Promise<{
                 await updateIssueNote(
                   gitlabProject.instanceUrl,
                   gitlabProject.projectId,
-                  bounty.issueNumber,
+                  issueNumber,
                   bounty.commentId,
                   message,
                   gitlabProject.accessToken
@@ -278,20 +289,19 @@ export async function checkPendingBounties(): Promise<{
             }
             break;
           }
-          case Platform.GITHUB:
-          default: {
+          case Platform.GITHUB: {
             if (bounty.commentId == null) {
               newCommentId = await postIssueComment(
-                bounty.repoOwner,
-                bounty.repoName,
-                bounty.issueNumber,
+                repoOwner,
+                repoName,
+                issueNumber,
                 message,
                 bounty.installationId ?? undefined,
               );
             } else {
               await updateIssueComment(
-                bounty.repoOwner,
-                bounty.repoName,
+                repoOwner,
+                repoName,
                 bounty.commentId,
                 message,
                 bounty.installationId ?? undefined,
@@ -373,6 +383,10 @@ export interface CompleteBountyResult {
   commission: CommissionResult;
 }
 
+interface SettlementStatusOptions {
+  updateStatus?: boolean;
+}
+
 /**
  * Complete a bounty - pay the contributor after PR is merged
  *
@@ -385,8 +399,9 @@ export async function completeBountyPayout(
   bounty: Bounty,
   contributorAddress: string,
   network: Network,
+  options: SettlementStatusOptions = {},
 ): Promise<CompleteBountyResult> {
-  if (bounty.status !== "ACTIVE") {
+  if (bounty.status !== "ACTIVE" && bounty.status !== "SETTLING") {
     throw new Error(`Cannot complete bounty with status: ${bounty.status}`);
   }
 
@@ -421,13 +436,12 @@ export async function completeBountyPayout(
     commission.commissionAmount,
   );
 
-  // Update bounty status
-  await prisma.bounty.update({
-    where: { id: bounty.id },
-    data: {
-      status: "CLAIMED",
-    },
-  });
+  if (options.updateStatus !== false) {
+    await prisma.bounty.update({
+      where: { id: bounty.id },
+      data: { status: "CLAIMED" },
+    });
+  }
 
   console.log(
     `✅ Bounty ${bounty.id} completed, paid to ${contributorAddress}`,
@@ -456,8 +470,9 @@ export async function completeBountyPayout(
 export async function refundBountyToMaintainer(
   bounty: Bounty,
   network: Network,
+  options: SettlementStatusOptions = {},
 ): Promise<[TransactionResult, bigint]> {
-  if (bounty.status !== "ACTIVE") {
+  if (bounty.status !== "ACTIVE" && bounty.status !== "SETTLING") {
     throw new Error(`Cannot refund bounty with status: ${bounty.status}`);
   }
 
@@ -472,14 +487,15 @@ export async function refundBountyToMaintainer(
     config.oracleKeys.privateKey,
   );
 
-  // Update bounty status and store transaction ID
-  await prisma.bounty.update({
-    where: { id: bounty.id },
-    data: {
-      status: "REFUNDED",
-      settlementTxId: transaction.txid,
-    },
-  });
+  if (options.updateStatus !== false) {
+    await prisma.bounty.update({
+      where: { id: bounty.id },
+      data: {
+        status: "REFUNDED",
+        settlementTxId: transaction.txid,
+      },
+    });
+  }
 
   console.log(`✅ Bounty ${bounty.id} refunded to ${bounty.maintainerAddress}`);
   console.log(`   TX: ${transaction.txid}`);
@@ -604,10 +620,16 @@ export async function updateBountyComments(id: string): Promise<void> {
     where: { id },
     include: { attempts: true, gitlabProject: true },
   });
-  if (bounty == null) {
-    throw new Error("Bounty not found");
-  }
-  const { repoOwner: owner, repoName: repo } = bounty;
+    if (bounty == null) {
+      throw new Error("Bounty not found");
+    }
+    if (bounty.platform === Platform.WEB) {
+      return;
+    }
+    if (bounty.issueNumber == null || bounty.repoOwner == null || bounty.repoName == null) {
+      throw new Error("Repository metadata is required for external bounty updates");
+    }
+    const { repoOwner: owner, repoName: repo } = bounty;
 
   try {
     let issueMessage: string | undefined = undefined;

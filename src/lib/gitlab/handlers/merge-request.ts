@@ -302,7 +302,7 @@ async function handleMergeRequestMerged(
     // Post completion message
     if (credentials.accessToken) {
       const completionMessage = messages.bountyCompletedMessage({
-        issueNumber: bounty.issueNumber,
+        issueNumber: bounty.issueNumber!,
         amount: bounty.amount,
         fundedAmount: bounty.fundedAmount ?? undefined,
         contributorAmount: commission.contributorAmount,
@@ -392,7 +392,7 @@ async function handleMergeRequestClosed(
   // Post rejection message
   if (credentials.accessToken) {
     const rejectionMessage = messages.claimRejectedMessage({
-      issueNumber: attempt.bounty.issueNumber,
+      issueNumber: attempt.bounty.issueNumber!,
     });
 
     if (attempt.commentId) {

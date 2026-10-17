@@ -35,9 +35,10 @@ export function getGlobalCommissionBps(): number {
  */
 export function isZeroCommissionProject(
   platform: Platform,
-  repoOwner: string,
-  repoName: string
+  repoOwner: string | null,
+  repoName: string | null
 ): boolean {
+  if (platform === Platform.WEB || !repoOwner || !repoName) return false;
   const envValue = process.env.ZERO_COMMISSION_PROJECTS;
   if (!envValue) return false;
 
@@ -76,8 +77,8 @@ export function calculateCommission(
   fundedAmount: bigint,
   txFee: bigint,
   platform: Platform,
-  repoOwner: string,
-  repoName: string
+  repoOwner: string | null,
+  repoName: string | null
 ): CommissionResult {
   const globalBps = getGlobalCommissionBps();
 

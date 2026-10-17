@@ -41,6 +41,7 @@ async function backfillIssueTitles() {
   const bounties = await prisma.bounty.findMany({
     where: {
       issueTitle: null,
+      platform: "GITHUB",
     },
     select: {
       id: true,
@@ -53,6 +54,9 @@ async function backfillIssueTitles() {
   console.log(`Found ${bounties.length} bounties without issue titles`);
 
   for (const bounty of bounties) {
+    if (bounty.repoOwner == null || bounty.repoName == null || bounty.issueNumber == null) {
+      continue;
+    }
     console.log(`Fetching title for ${bounty.repoOwner}/${bounty.repoName}#${bounty.issueNumber}...`);
 
     const title = await fetchIssueTitle(bounty.repoOwner, bounty.repoName, bounty.issueNumber);

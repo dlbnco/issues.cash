@@ -10,6 +10,7 @@ const statusConfig: Record<
 > = {
   PENDING_FUNDING: { label: "pending", colorClass: "bg-warning" },
   ACTIVE: { label: "active", colorClass: "bg-success" },
+  SETTLING: { label: "settling", colorClass: "bg-warning" },
   CLAIMED: { label: "claimed", colorClass: "bg-info" },
   EXPIRED: { label: "expired", colorClass: "bg-base-300" },
   REFUNDED: { label: "refunded", colorClass: "bg-base-300" },

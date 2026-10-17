@@ -1,8 +1,6 @@
 import type { BountyListItem } from "@/lib/queries";
 import { formatBCH } from "@/lib/format";
 import { StatusBadge } from "./StatusBadge";
-import Link from "next/link";
-import Image from "next/image";
 
 interface BountyListProps {
   bounties: BountyListItem[];
@@ -29,32 +27,29 @@ export function BountyList({
     <div className="divide-y divide-base-200">
       {bounties.map((bounty) => {
         const formattedAmount = formatBCH(bounty.fundedAmount ?? bounty.amount, { symbol: true });
-        const avatarUrl = `https://github.com/${bounty.repoOwner}.png?size=48`;
+        const isWebBounty = bounty.webSlug != null;
+        const href = isWebBounty ? `/bounties/${bounty.webSlug}` : bounty.issueUrl;
+        const title = bounty.webTitle ?? bounty.issueTitle ?? (bounty.issueNumber ? `Issue #${bounty.issueNumber}` : "Untitled bounty");
 
         return (
           <a
             key={bounty.id}
-            href={bounty.issueUrl}
-            target="_blank"
-            rel="noopener noreferrer"
+            href={href ?? "#"}
+            target={isWebBounty ? undefined : "_blank"}
+            rel={isWebBounty ? undefined : "noopener noreferrer"}
             className={`grid ${showRepo ? "grid-cols-[auto_auto_auto_1fr_auto]" : "grid-cols-[auto_auto_1fr_auto]"} gap-3 items-center py-3 px-4 font-mono text-sm hover:bg-base-200 transition-colors`}
           >
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={avatarUrl}
-              alt={bounty.repoOwner}
-              className="rounded-full w-6 h-6"
-            />
+            {isWebBounty ? <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary text-xs text-primary-content">$</span> : <img src={`https://github.com/${bounty.repoOwner}.png?size=48`} alt={bounty.repoOwner ?? "Repository"} className="rounded-full w-6 h-6" />}
             {showRepo && (
               <div className="text-base-content/70 whitespace-nowrap">
-                {bounty.repoOwner}
+                {isWebBounty ? "community" : bounty.repoOwner}
               </div>
             )}
             <div className="text-base-content/50 whitespace-nowrap">
-              #{bounty.issueNumber}
+              {isWebBounty ? "web" : `#${bounty.issueNumber}`}
             </div>
             <div className="truncate">
-              {bounty.issueTitle ?? `Issue #${bounty.issueNumber}`}
+              {title}
             </div>
             <div className="whitespace-nowrap text-right">
               <div className="text-success">{formattedAmount}</div>
