@@ -18,7 +18,7 @@ import crypto from "crypto";
 import { secp256k1 } from "@noble/curves/secp256k1.js";
 import fs from "fs";
 import path from "path";
-import { UNLOCKING_TX_FEE_AMOUNT, PER_INPUT_FEE, DUST_LIMIT } from "./constants";
+import { UNLOCKING_TX_FEE_AMOUNT, COMPLETION_PER_INPUT_FEE, PER_INPUT_FEE, DUST_LIMIT } from "./constants";
 
 export interface OracleKeys {
   privateKey: Buffer;
@@ -546,7 +546,7 @@ export async function completeBounty(
 
   // Calculate dynamic fee based on number of inputs
   const totalFee =
-    UNLOCKING_TX_FEE_AMOUNT + BigInt(utxos.length - 1) * PER_INPUT_FEE;
+    UNLOCKING_TX_FEE_AMOUNT + BigInt(utxos.length - 1) * COMPLETION_PER_INPUT_FEE;
   console.log(`   Calculated fee: ${totalFee} satoshis (${utxos.length} inputs)`);
 
   // Verify contract has enough funds
