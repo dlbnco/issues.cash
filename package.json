@@ -1,6 +1,6 @@
 {
   "name": "issues.cash",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "private": true,
   "packageManager": "yarn@4.5.3",
   "scripts": {

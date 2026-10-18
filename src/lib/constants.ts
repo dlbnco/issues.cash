@@ -7,6 +7,10 @@ export const UNLOCKING_TX_FEE_AMOUNT = BigInt(1000);
 // Additional fee per input beyond the first (~150 bytes per input at 1 sat/byte)
 export const PER_INPUT_FEE = BigInt(150);
 
+// Payout unlocks carry more data than refund/timeout unlocks. Reserve enough
+// for each additional input to satisfy the BCH relay fee policy.
+export const COMPLETION_PER_INPUT_FEE = BigInt(500);
+
 // Dust limit - minimum output value
 export const DUST_LIMIT = BigInt(546);
 

@@ -114,9 +114,9 @@ describe("real Chipnet escrow transactions", () => {
     const creator = h.wallet("multi-creator");
     const claimant = h.wallet("multi-claimant");
     const escrow = h.escrow("multi", creator.address);
-    await h.fund(escrow.address, BigInt(50_575));
-    await h.fund(escrow.address, BigInt(50_575));
-    await h.waitCoins(escrow.address, BigInt(101_150));
+    await h.fund(escrow.address, BigInt(50_750));
+    await h.fund(escrow.address, BigInt(50_750));
+    await h.waitCoins(escrow.address, BigInt(101_500));
     const payout = await completeBounty(escrow.contract, h.config.provider, claimant.address, REWARD, escrow.issueHash, h.config.oracleKeys.privateKey, null, BigInt(0));
     h.record("multi-input payout", payout);
     expect((await h.outputs(payout.txid)).inputs).toHaveLength(2);
@@ -133,14 +133,13 @@ describe("real Chipnet escrow transactions", () => {
     await h.assertOutput(refund.transaction.txid, creator.address, REWARD);
   });
 
-  // TODO(#53): the current payout fee schedule is below Chipnet relay policy.
-  test.fails("spends three deposits in a payout transaction", async () => {
+  test("spends three deposits in a payout transaction", async () => {
     const h = chain!;
     const creator = h.wallet("three-input-payout-creator");
     const claimant = h.wallet("three-input-payout-claimant");
     const escrow = h.escrow("three-input-payout", creator.address);
-    for (let i = 0; i < 3; i += 1) await h.fund(escrow.address, BigInt(33_767));
-    await h.waitCoins(escrow.address, BigInt(101_301));
+    for (let i = 0; i < 3; i += 1) await h.fund(escrow.address, BigInt(34_000));
+    await h.waitCoins(escrow.address, BigInt(102_000));
     const payout = await completeBounty(escrow.contract, h.config.provider, claimant.address, REWARD, escrow.issueHash, h.config.oracleKeys.privateKey, null, BigInt(0));
     h.record("three-input payout", payout);
     await h.assertOutput(payout.txid, claimant.address, REWARD);
