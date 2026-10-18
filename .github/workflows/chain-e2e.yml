@@ -1,0 +1,142 @@
+name: Chipnet transactions
+
+on:
+  workflow_dispatch:
+  pull_request:
+    types: [opened, reopened, synchronize, labeled, unlabeled]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      relevant: ${{ steps.filter.outputs.relevant }}
+    steps:
+      - id: filter
+        uses: actions/github-script@v7
+        with:
+          script: |
+            if (context.eventName !== 'pull_request') {
+              core.setOutput('relevant', 'true');
+              return;
+            }
+            const files = await github.paginate(github.rest.pulls.listFiles, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.issue.number,
+              per_page: 100,
+            });
+            const relevant = files.some(({ filename }) =>
+              /^(contracts\/|e2e\/|prisma\/|src\/lib\/(contract|settlement-transaction|web-settlement|web-bounty|bounty|commission|constants|network)\.ts$|src\/app\/api\/(web-bounties|cron)\/|vitest\.e2e\.config\.mts$|package\.json$|yarn\.lock$|\.github\/workflows\/chain-e2e\.yml$)/.test(filename),
+            );
+            core.setOutput('relevant', String(relevant));
+
+  chain-e2e:
+    needs: changes
+    if: github.event_name == 'workflow_dispatch' || (github.event.pull_request.head.repo.full_name == github.repository && needs.changes.outputs.relevant == 'true')
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: chipnet-e2e
+    # All branches use the SAME environment wallet. Never cancel an active spend.
+    concurrency:
+      group: chipnet-e2e-wallet
+      cancel-in-progress: false
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: e2e
+          POSTGRES_PASSWORD: e2e
+          POSTGRES_DB: chain_e2e
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U e2e -d chain_e2e"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://e2e:e2e@localhost:5432/chain_e2e
+      TEST_DATABASE_URL: postgresql://e2e:e2e@localhost:5432/chain_e2e
+      NEXT_PUBLIC_BCH_NETWORK: testnet3
+      BCH_ELECTRUM_HOST_TESTNET3: chipnet.bch.ninja
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: corepack enable
+      - run: corepack yarn install --immutable
+      - run: corepack yarn prisma generate
+      - run: corepack yarn prisma migrate deploy
+      - run: corepack yarn test:e2e:offline
+      - name: Broadcast Chipnet test transactions
+        env:
+          E2E_RUN_CHIPNET: '1'
+          E2E_FUNDER_WIF: ${{ secrets.E2E_FUNDER_WIF }}
+        run: corepack yarn test:e2e
+      - name: Publish public transaction manifest
+        if: always()
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import glob, json, os
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as summary:
+              summary.write('## Chipnet transactions\n')
+              for filename in glob.glob('e2e-artifacts/*/manifest.json'):
+                  data = json.load(open(filename))
+                  summary.write(f"\nRun `{data['runId']}`\n")
+                  for tx in data['transactions']:
+                      summary.write(f"- [{tx['label']}](https://chipnet.chaingraph.cash/tx/{tx['txid']})\n")
+                  for error in data.get('recoveryErrors', []):
+                      summary.write(f"- **Recovery required:** {error}\n")
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: chipnet-public-manifests
+          path: e2e-artifacts/*/manifest.json
+          if-no-files-found: ignore
+          retention-days: 30
+
+  chipnet-e2e-gate:
+    name: Chipnet E2E gate
+    needs: [changes, chain-e2e]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/github-script@v7
+        env:
+          RELEVANT: ${{ needs.changes.outputs.relevant }}
+          CHAIN_RESULT: ${{ needs.chain-e2e.result }}
+        with:
+          script: |
+            if (context.eventName !== 'pull_request') {
+              core.notice('Manual run; no pull-request gate decision is needed.');
+              return;
+            }
+            if (process.env.RELEVANT !== 'true') {
+              core.notice('No Chipnet E2E-relevant files changed.');
+              return;
+            }
+            const isFork = context.payload.pull_request.head.repo.full_name !== context.payload.repository.full_name;
+            if (isFork) {
+              const labels = await github.paginate(github.rest.issues.listLabelsOnIssue, {
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                per_page: 100,
+              });
+              if (labels.some(({ name }) => name === 'chipnet-verified')) {
+                core.notice('Fork PR manually verified on Chipnet by a maintainer.');
+                return;
+              }
+              core.setFailed('Fork PRs cannot access the Chipnet wallet. A maintainer must run the suite locally, then add the chipnet-verified label.');
+              return;
+            }
+            if (process.env.CHAIN_RESULT !== 'success') {
+              core.setFailed(`Chipnet transaction suite did not pass (result: ${process.env.CHAIN_RESULT}).`);
+            }

@@ -1,0 +1,2 @@
+-- AlterTable
+ALTER TABLE "Bounty" ALTER COLUMN "commentId" SET DATA TYPE BIGINT;

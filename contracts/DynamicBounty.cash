@@ -34,63 +34,96 @@ contract DynamicBounty(
      * Complete bounty - Pay contributor after PR merged
      *
      * @param contributorPKH - Hash160 of contributor's BCH address
+     * @param contributorAmount - Amount to pay contributor (in satoshis)
+     * @param oracleFeePKH - Hash160 of oracle fee address (ignored if commissionAmount == 0)
+     * @param commissionAmount - Commission for oracle (0 if no commission)
      * @param oracleSig - Oracle's signature on the message
      *
-     * Oracle signs: "COMPLETE" + issueHash + contributorPKH
+     * Oracle signs: "COMPLETE" + issueHash + contributorPKH + contributorAmount + oracleFeePKH + commissionAmount
      *
      * This proves:
      * - Oracle verified the PR was merged
      * - Oracle verified this specific contributor should be paid
-     * - Oracle cannot pay a different address than signed
+     * - Oracle committed to the exact payout amounts
+     * - Commission is transparently encoded in the signed message
      */
-    function complete(bytes20 contributorPKH, datasig oracleSig) {
+    function complete(
+        bytes20 contributorPKH,
+        int contributorAmount,
+        bytes20 oracleFeePKH,
+        int commissionAmount,
+        datasig oracleSig
+    ) {
         // Construct the message that oracle signed
-        // Format: "COMPLETE" + issueHash + contributorPKH
-        bytes message = bytes('COMPLETE') + issueHash + contributorPKH;
+        // Format: "COMPLETE" + issueHash + contributorPKH + contributorAmount + oracleFeePKH + commissionAmount
+        bytes message = bytes('COMPLETE')
+            + issueHash
+            + contributorPKH
+            + bytes8(contributorAmount)
+            + oracleFeePKH
+            + bytes8(commissionAmount);
 
         // Verify oracle signed this exact message
         require(checkDataSig(oracleSig, message, oraclePubkey));
 
-        // Ensure exactly one output (all funds go to contributor)
-        require(tx.outputs.length == 1);
+        // Note: We don't check input values here to support multi-UTXO spending.
+        // Bitcoin consensus rules already prevent outputs > inputs.
+        // The oracle signature commits to exact output amounts, preventing overspend.
 
-        // Verify output pays to contributor's address
+        // Build contributor locking bytecode
         bytes25 contributorLock = new LockingBytecodeP2PKH(contributorPKH);
-        require(tx.outputs[0].lockingBytecode == contributorLock);
 
-        // Verify output receives entire contract balance
-        require(tx.outputs[0].value == tx.inputs[this.activeInputIndex].value);
+        if (commissionAmount > 0) {
+            // Two outputs: contributor + oracle fee
+            require(tx.outputs.length == 2);
+
+            // Output 0: contributor
+            require(tx.outputs[0].lockingBytecode == contributorLock);
+            require(tx.outputs[0].value == contributorAmount);
+
+            // Output 1: oracle fee
+            bytes25 oracleFeeLock = new LockingBytecodeP2PKH(oracleFeePKH);
+            require(tx.outputs[1].lockingBytecode == oracleFeeLock);
+            require(tx.outputs[1].value == commissionAmount);
+        } else {
+            // Single output: contributor only (no commission)
+            require(tx.outputs.length == 1);
+            require(tx.outputs[0].lockingBytecode == contributorLock);
+            require(tx.outputs[0].value == contributorAmount);
+        }
     }
 
     /**
      * Refund maintainer - Issue closed without merge or bounty cancelled
      *
+     * @param amount - Exact refund amount (in satoshis)
      * @param oracleSig - Oracle's signature on the refund message
      *
-     * Oracle signs: "REFUND" + issueHash
+     * Oracle signs: "REFUND" + issueHash + amount
      *
      * This proves:
      * - Issue was closed without merged PR, OR
      * - Maintainer requested cancellation, OR
      * - Some other condition requiring refund
+     * - Oracle committed to the exact refund amount
      */
-    function refund(datasig oracleSig) {
+    function refund(int amount, datasig oracleSig) {
         // Construct the refund message
-        // Format: "REFUND" + issueHash
-        bytes message = bytes('REFUND') + issueHash;
+        // Format: "REFUND" + issueHash + amount (8 bytes LE)
+        bytes message = bytes('REFUND') + issueHash + bytes8(amount);
 
         // Verify oracle signed this message
         require(checkDataSig(oracleSig, message, oraclePubkey));
 
-        // Ensure exactly one output (all funds returned to maintainer)
+        // Ensure exactly one output
         require(tx.outputs.length == 1);
 
         // Verify output pays to maintainer's address
         bytes25 maintainerLock = new LockingBytecodeP2PKH(maintainerPKH);
         require(tx.outputs[0].lockingBytecode == maintainerLock);
 
-        // Verify output receives entire contract balance
-        require(tx.outputs[0].value == tx.inputs[this.activeInputIndex].value);
+        // Verify output is exactly the signed amount
+        require(tx.outputs[0].value == amount);
     }
 
     /**
@@ -113,8 +146,5 @@ contract DynamicBounty(
         // Verify output pays to maintainer's address
         bytes25 maintainerLock = new LockingBytecodeP2PKH(maintainerPKH);
         require(tx.outputs[0].lockingBytecode == maintainerLock);
-
-        // Verify output receives entire contract balance
-        require(tx.outputs[0].value == tx.inputs[this.activeInputIndex].value);
     }
 }
