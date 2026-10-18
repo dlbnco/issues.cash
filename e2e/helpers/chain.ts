@@ -250,19 +250,22 @@ export class ChainHarness {
     }
   }
 
-  async cleanup() {
+  async cleanup(recoverSavedTransactions = false) {
     const errors: string[] = [];
-    // A process may have stopped between saving and broadcasting a transaction,
-    // or lost the broadcast reply. Replay only the exact saved bytes.
-    for (const tx of this.manifest.transactions) {
-      try {
-        try { await this.config.provider.getRawTransaction(tx.txid); }
-        catch {
-          try { await this.config.provider.sendRawTransaction(tx.hex); }
-          catch { /* It may already be in the node's mempool or chain. */ }
-          await this.waitTransaction(tx.txid, 5_000);
-        }
-      } catch { errors.push(`Saved transaction recovery failed: ${tx.txid}`); }
+    if (recoverSavedTransactions) {
+      // A process may have stopped between saving and broadcasting a transaction,
+      // or lost the broadcast reply. This is intentionally recovery-only: checking
+      // every historical transaction after each test makes the normal suite O(n²).
+      for (const tx of this.manifest.transactions) {
+        try {
+          try { await this.config.provider.getRawTransaction(tx.txid); }
+          catch {
+            try { await this.config.provider.sendRawTransaction(tx.hex); }
+            catch { /* It may already be in the node's mempool or chain. */ }
+            await this.waitTransaction(tx.txid, 5_000);
+          }
+        } catch { errors.push(`Saved transaction recovery failed: ${tx.txid}`); }
+      }
     }
     for (const params of this.manifest.escrows) {
       try {

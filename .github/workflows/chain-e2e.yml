@@ -3,39 +3,47 @@ name: Chipnet transactions
 on:
   workflow_dispatch:
   pull_request:
-    paths:
-      - contracts/**
-      - src/lib/contract.ts
-      - src/lib/settlement-transaction.ts
-      - src/lib/web-settlement.ts
-      - src/lib/web-bounty.ts
-      - src/lib/bounty.ts
-      - src/lib/commission.ts
-      - src/lib/constants.ts
-      - src/lib/network.ts
-      - src/app/api/web-bounties/**
-      - src/app/api/cron/**
-      - prisma/**
-      - e2e/**
-      - vitest.e2e.config.mts
-      - package.json
-      - yarn.lock
-      - .github/workflows/chain-e2e.yml
+    types: [opened, reopened, synchronize, labeled, unlabeled]
 
 permissions:
   contents: read
-
-# All branches use the SAME environment wallet. Never cancel an active spend.
-concurrency:
-  group: chipnet-e2e-wallet
-  cancel-in-progress: false
+  pull-requests: read
 
 jobs:
-  chain-e2e:
-    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.head.repo.full_name == github.repository
+  changes:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    outputs:
+      relevant: ${{ steps.filter.outputs.relevant }}
+    steps:
+      - id: filter
+        uses: actions/github-script@v7
+        with:
+          script: |
+            if (context.eventName !== 'pull_request') {
+              core.setOutput('relevant', 'true');
+              return;
+            }
+            const files = await github.paginate(github.rest.pulls.listFiles, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.issue.number,
+              per_page: 100,
+            });
+            const relevant = files.some(({ filename }) =>
+              /^(contracts\/|e2e\/|prisma\/|src\/lib\/(contract|settlement-transaction|web-settlement|web-bounty|bounty|commission|constants|network)\.ts$|src\/app\/api\/(web-bounties|cron)\/|vitest\.e2e\.config\.mts$|package\.json$|yarn\.lock$|\.github\/workflows\/chain-e2e\.yml$)/.test(filename),
+            );
+            core.setOutput('relevant', String(relevant));
+
+  chain-e2e:
+    needs: changes
+    if: github.event_name == 'workflow_dispatch' || (github.event.pull_request.head.repo.full_name == github.repository && needs.changes.outputs.relevant == 'true')
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
     environment: chipnet-e2e
+    # All branches use the SAME environment wallet. Never cancel an active spend.
+    concurrency:
+      group: chipnet-e2e-wallet
+      cancel-in-progress: false
     services:
       postgres:
         image: postgres:16
@@ -93,3 +101,42 @@ jobs:
           path: e2e-artifacts/*/manifest.json
           if-no-files-found: ignore
           retention-days: 30
+
+  chipnet-e2e-gate:
+    name: Chipnet E2E gate
+    needs: [changes, chain-e2e]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/github-script@v7
+        env:
+          RELEVANT: ${{ needs.changes.outputs.relevant }}
+          CHAIN_RESULT: ${{ needs.chain-e2e.result }}
+        with:
+          script: |
+            if (context.eventName !== 'pull_request') {
+              core.notice('Manual run; no pull-request gate decision is needed.');
+              return;
+            }
+            if (process.env.RELEVANT !== 'true') {
+              core.notice('No Chipnet E2E-relevant files changed.');
+              return;
+            }
+            const isFork = context.payload.pull_request.head.repo.full_name !== context.payload.repository.full_name;
+            if (isFork) {
+              const labels = await github.paginate(github.rest.issues.listLabelsOnIssue, {
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                per_page: 100,
+              });
+              if (labels.some(({ name }) => name === 'chipnet-verified')) {
+                core.notice('Fork PR manually verified on Chipnet by a maintainer.');
+                return;
+              }
+              core.setFailed('Fork PRs cannot access the Chipnet wallet. A maintainer must run the suite locally, then add the chipnet-verified label.');
+              return;
+            }
+            if (process.env.CHAIN_RESULT !== 'success') {
+              core.setFailed(`Chipnet transaction suite did not pass (result: ${process.env.CHAIN_RESULT}).`);
+            }

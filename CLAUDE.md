@@ -37,11 +37,21 @@ yarn start
 # Linting
 yarn lint
 
+# Chipnet escrow tests (does not spend coins)
+yarn test:e2e:offline
+
+# Live Chipnet transactions; requires a dedicated funded testnet WIF
+E2E_RUN_CHIPNET=1 E2E_FUNDER_WIF='...' NEXT_PUBLIC_BCH_NETWORK=testnet3 yarn test:e2e
+
 # Database migrations
 npx prisma migrate dev
 npx prisma generate
 npx prisma studio  # GUI for database
 ```
+
+## Chipnet E2E merge gate
+
+Changes to escrow contracts, settlement code, or Chipnet E2E infrastructure require the **Chipnet E2E gate**. Same-repository PRs use the protected GitHub environment. Fork PRs cannot access its wallet secret: a maintainer must run the live suite locally and apply the `chipnet-verified` label after it passes. Remove that label whenever the fork PR head changes. See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Architecture
 
