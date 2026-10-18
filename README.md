@@ -123,6 +123,41 @@ The app runs on `mainnet` by default. To run on `testnet3`, set the following Ac
 BCH_NETWORK=testnet3
 ```
 
+# Real Chipnet transaction tests
+
+`yarn test:e2e` is separate from the mocked Jest suite. It broadcasts real transactions on **Chipnet only**: payouts with and without commission, multi-input payouts, refunds, expiry using the chain's median time, and rejection of an invalid oracle signature. It verifies the decoded transaction inputs/outputs, not just API responses. These are contract/service integration tests, not browser or Telegram-login tests.
+
+`yarn test:e2e:offline` separately checks the harness, recovery keys and transaction construction using CashScript's local BCH VM and `MockNetworkProvider`. It needs no wallet secret and does not replace the real-network suite.
+
+Use a **dedicated, compressed testnet WIF**, funded on Chipnet (for example via https://tbch.googol.cash/). Keep at least 0.002 tBCH available; 0.01 tBCH gives more headroom. Never reuse a mainnet wallet's private key, even re-encoded as a testnet WIF.
+
+```bash
+export E2E_RUN_CHIPNET=1
+export E2E_FUNDER_WIF='your-dedicated-chipnet-wallet-WIF'
+# Unset an inherited mainnet website configuration before running.
+export NEXT_PUBLIC_BCH_NETWORK=testnet3
+yarn test:e2e
+```
+
+Tests use `chipnet.bch.ninja` explicitly. The app's existing `testnet3` address/network setting is routed to Chipnet with `BCH_ELECTRUM_HOST_TESTNET3`; this does not make testnet3 and Chipnet the same chain. `ORACLE_KEY_DIR` redirects oracle files into an ignored per-run directory. Normal app defaults are unchanged.
+
+After each test, recovery attempts to refund remaining escrows and sweep the test wallets (including commissions) back to the funder. Runs consume real testnet fees, generally several thousand satoshis per case. Balances below fee plus dust cannot be swept. Network failures or killed processes can interrupt cleanup; recovery is best-effort, not a guarantee.
+
+Each run writes a public `e2e-artifacts/<run-id>/manifest.json` **before funding**. The per-run test keys are derived from the funder key and run ID with a domain-separated HMAC, so this public manifest plus the original funder WIF is sufficient to recover without publishing private keys. Keep the funder key private and retain manifests for failed runs. Never upload the `keys/` subdirectory.
+
+```bash
+# With the ORIGINAL E2E_FUNDER_WIF and E2E_RUN_CHIPNET=1 still set:
+E2E_RECOVER_MANIFEST=./e2e-artifacts/<run-id>/manifest.json yarn test:e2e
+```
+
+## GitHub Actions
+
+Create an environment named **`chipnet-e2e`** with secret **`E2E_FUNDER_WIF`**. Configure required reviewers for that environment before adding the secret: a same-repository PR executes its code with the spending key, so approve only trusted changes. Use a low-balance test-only wallet.
+
+The **Chipnet transactions** workflow runs on pull requests touching escrow code, migrations, tests or their configuration, and supports manual dispatch after the workflow exists on the default branch. There is no PR-label trigger. Fork PRs are skipped; `pull_request_target` is not used. Runs are serialized across branches, are not cancelled mid-spend, and have a 15-minute timeout. Do not run locally at the same time with the same wallet.
+
+The workflow provisions disposable PostgreSQL, applies migrations (for application-level scenarios added by dependent PRs), and uploads only public transaction/recovery manifests. Transaction links and recovery failures appear in its summary. No faucet calls or automatic top-ups are made.
+
 # GitLab integration
 
 1. Create an access token for the bot in `Settings → Access Tokens`:
