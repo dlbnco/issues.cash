@@ -127,7 +127,19 @@ export class ChainHarness {
     const first = crypto.createHash("sha256").update(Buffer.from(hex, "hex")).digest();
     const txid = crypto.createHash("sha256").update(first).digest().reverse().toString("hex");
     this.record(label, { txid, hex });
-    try { await this.config.provider.sendRawTransaction(hex); } catch { /* Check visibility before reporting failure. */ }
+    try {
+      await this.config.provider.sendRawTransaction(hex);
+    } catch (error) {
+      // A lost reply can mean the node accepted the transaction, but a node
+      // rejection must not remain in the recovery manifest indefinitely.
+      try {
+        await this.waitTransaction(txid, 5_000);
+      } catch {
+        this.forgetTransaction(txid);
+        const message = error instanceof Error ? error.message : String(error);
+        throw new Error(`Chipnet transaction broadcast failed: ${message}`);
+      }
+    }
     await this.waitTransaction(txid);
     return txid;
   }
@@ -140,8 +152,16 @@ export class ChainHarness {
     console.log(`${label}: https://chipnet.chaingraph.cash/tx/${transaction.txid}`);
   }
 
-  async waitTransaction(txid: string) {
-    return waitFor(`transaction ${txid}`, () => this.config.provider.getRawTransaction(txid));
+  private forgetTransaction(txid: string) {
+    const index = this.manifest.transactions.findIndex((transaction) => transaction.txid === txid);
+    if (index !== -1) {
+      this.manifest.transactions.splice(index, 1);
+      this.save();
+    }
+  }
+
+  async waitTransaction(txid: string, timeoutMs?: number) {
+    return waitFor(`transaction ${txid}`, () => this.config.provider.getRawTransaction(txid), timeoutMs);
   }
 
   async send(wallet: Wallet, address: string, amount?: bigint) {
@@ -238,8 +258,9 @@ export class ChainHarness {
       try {
         try { await this.config.provider.getRawTransaction(tx.txid); }
         catch {
-          await this.config.provider.sendRawTransaction(tx.hex);
-          await this.waitTransaction(tx.txid);
+          try { await this.config.provider.sendRawTransaction(tx.hex); }
+          catch { /* It may already be in the node's mempool or chain. */ }
+          await this.waitTransaction(tx.txid, 5_000);
         }
       } catch { errors.push(`Saved transaction recovery failed: ${tx.txid}`); }
     }
