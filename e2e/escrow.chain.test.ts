@@ -79,7 +79,7 @@ describe("real Chipnet escrow transactions", () => {
     builder.addOutput({ to: creator.address, amount: REWARD });
     // Deliberately bypass local debug so this assertion exercises network validation.
     const hex = builder.build();
-    await expect(h.config.provider.sendRawTransaction(hex)).rejects.toThrow();
+    await expect(h.config.provider.sendRawTransaction(hex)).rejects.toThrow(/script|signature|checkdatasig/i);
     expect((await h.coins(escrow.address)).map((coin) => `${coin.txid}:${coin.vout}`))
       .toEqual(coins.map((coin) => `${coin.txid}:${coin.vout}`));
   });

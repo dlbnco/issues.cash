@@ -61,3 +61,13 @@ test("rejects a real mainnet WIF before constructing any network provider", () =
   vi.stubEnv("E2E_FUNDER_WIF", encodePrivateKeyWif(new Uint8Array(32).fill(2), "mainnet"));
   expect(() => new ChainHarness()).toThrow("Mainnet keys are never accepted");
 });
+
+test("does not retain a transaction the node explicitly rejects", async () => {
+  const rejected = new Error("mandatory-script-verify-flag-failed");
+  vi.spyOn(provider, "sendRawTransaction").mockRejectedValue(rejected);
+  vi.spyOn(chain, "waitTransaction").mockRejectedValue(new Error("not found"));
+
+  await expect(chain.broadcast("rejected", "00")).rejects.toThrow(rejected.message);
+  const manifest = (chain as unknown as { manifest: { transactions: unknown[] } }).manifest;
+  expect(manifest.transactions).toEqual([]);
+});
