@@ -18,6 +18,9 @@ export function Header() {
         </Link>
       </div>
       <div className="flex-none">
+        <Link href="/post" className="btn btn-primary btn-sm mr-2">
+          Post a bounty
+        </Link>
         <Link
           href="https://github.com/dlbnco/issues.cash/wiki/Getting-Started"
           className="btn btn-ghost btn-sm"

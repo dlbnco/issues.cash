@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { processExpiredBounties } from "@/lib/bounty";
+import { reconcileWebSettlements } from "@/lib/web-settlement";
+import { prisma } from "@/lib/prisma";
 
 /**
  * Cron endpoint to process expired bounties
@@ -26,6 +28,8 @@ export async function GET(request: NextRequest) {
     console.log(`🔄 Processing expired bounties...`);
 
     // Process expired bounties
+    const settlements = await reconcileWebSettlements();
+    await prisma.rateLimitBucket.deleteMany({ where: { expiresAt: { lte: new Date() } } });
     const result = await processExpiredBounties();
 
     console.log(
@@ -37,6 +41,7 @@ export async function GET(request: NextRequest) {
       checked: result.checked,
       refunded: result.refunded,
       errors: result.errors,
+      settlements,
       timestamp: new Date().toISOString(),
     });
   } catch (error) {

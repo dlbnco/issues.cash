@@ -1,13 +1,17 @@
 import { prisma } from "@/lib/prisma";
-import type { BCHNetwork, BountyStatus } from "@prisma/client";
+import { Platform, type BCHNetwork, type BountyStatus } from "@prisma/client";
+
+export type BountySortOption = "newest" | "oldest" | "highest" | "lowest";
 
 export interface BountyListItem {
   id: string;
-  repoOwner: string;
-  repoName: string;
-  issueNumber: number;
+  repoOwner: string | null;
+  repoName: string | null;
+  issueNumber: number | null;
   issueTitle: string | null;
-  issueUrl: string;
+  issueUrl: string | null;
+  webSlug?: string | null;
+  webTitle?: string | null;
   amount: bigint;
   fundedAmount: bigint | null;
   status: BountyStatus;
@@ -23,15 +27,24 @@ export async function getAllBounties(options?: {
   limit?: number;
   offset?: number;
   network?: BCHNetwork;
+  sortBy?: BountySortOption;
 }): Promise<BountyListItem[]> {
-  const { status, limit = 50, offset = 0, network } = options ?? {};
+  const { status, limit = 50, offset = 0, network, sortBy = "newest" } = options ?? {};
+  const orderBy = sortBy === "oldest"
+    ? { createdAt: "asc" as const }
+    : sortBy === "highest"
+      ? { amount: "desc" as const }
+      : sortBy === "lowest"
+        ? { amount: "asc" as const }
+        : { createdAt: "desc" as const };
 
   const bounties = await prisma.bounty.findMany({
     where: {
+      OR: [{ webBounty: null }, { webBounty: { cancelledAt: null } }],
       ...(status ? { status: { in: status } } : {}),
       ...(network ? { network } : {}),
     },
-    orderBy: { createdAt: "desc" },
+    orderBy,
     take: limit,
     skip: offset,
     select: {
@@ -45,16 +58,33 @@ export async function getAllBounties(options?: {
       fundedAmount: true,
       status: true,
       createdAt: true,
+      webBounty: { select: { slug: true, title: true } },
       _count: {
         select: { attempts: true },
       },
     },
   });
 
-  return bounties.map((b) => ({
+  return bounties.map(({ webBounty, ...b }) => ({
     ...b,
+    webSlug: webBounty?.slug,
+    webTitle: webBounty?.title,
     attemptsCount: b._count.attempts,
   }));
+}
+
+export async function getBountiesCount(options?: {
+  status?: BountyStatus[];
+  network?: BCHNetwork;
+}): Promise<number> {
+  const { status, network } = options ?? {};
+  return prisma.bounty.count({
+    where: {
+      OR: [{ webBounty: null }, { webBounty: { cancelledAt: null } }],
+      ...(status ? { status: { in: status } } : {}),
+      ...(network ? { network } : {}),
+    },
+  });
 }
 
 /**
@@ -190,7 +220,11 @@ export async function getTopOrganizations(
 ) {
   const result = await prisma.bounty.groupBy({
     by: ["repoOwner"],
-    where: network ? { network } : undefined,
+    where: {
+      repoOwner: { not: null },
+      platform: { in: [Platform.GITHUB, Platform.GITLAB] },
+      ...(network ? { network } : {}),
+    },
     _sum: {
       fundedAmount: true,
     },
@@ -205,7 +239,7 @@ export async function getTopOrganizations(
     take: limit,
   });
 
-  return result.map((org) => ({
+  return result.filter((org): org is typeof org & { repoOwner: string } => org.repoOwner != null).map((org) => ({
     owner: org.repoOwner,
     totalFunded: org._sum.fundedAmount ?? BigInt(0),
     bountiesCount: org._count.id,

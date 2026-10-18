@@ -18,6 +18,7 @@ import crypto from "crypto";
 import { secp256k1 } from "@noble/curves/secp256k1.js";
 import fs from "fs";
 import path from "path";
+import { sendSettlementTransaction } from "./settlement-transaction";
 import { UNLOCKING_TX_FEE_AMOUNT, COMPLETION_PER_INPUT_FEE, PER_INPUT_FEE, DUST_LIMIT } from "./constants";
 
 export interface OracleKeys {
@@ -489,6 +490,7 @@ export async function completeBounty(
   oraclePrivateKey: Buffer,
   oracleFeePKH: Buffer | null,
   commissionAmount: bigint,
+  beforeBroadcast?: (transaction: TransactionResult) => Promise<void>,
 ): Promise<TransactionResult> {
   console.log("💰 Completing bounty...");
   console.log(`   Contributor: ${contributorAddress}`);
@@ -594,7 +596,7 @@ export async function completeBounty(
   }
 
   // Send transaction
-  const tx = await txBuilder.send();
+  const tx = await sendSettlementTransaction(txBuilder, provider, beforeBroadcast);
 
   console.log("✅ Bounty completed!");
   console.log(`   TX: ${tx.txid}`);
@@ -631,6 +633,7 @@ export async function refundBounty(
   maintainerAddress: string,
   issueHash: string,
   oraclePrivateKey: Buffer,
+  beforeBroadcast?: (transaction: TransactionResult) => Promise<void>,
 ): Promise<RefundResult> {
   console.log("↩️  Refunding bounty...");
   console.log(`   Maintainer: ${maintainerAddress}`);
@@ -707,7 +710,7 @@ export async function refundBounty(
   txBuilder.addOutput({ to: maintainerAddress, amount: refundAmount });
 
   // Send transaction
-  const tx = await txBuilder.send();
+  const tx = await sendSettlementTransaction(txBuilder, provider, beforeBroadcast);
 
   console.log("✅ Bounty refunded!");
   console.log(`   TX: ${tx.txid}`);
@@ -747,6 +750,7 @@ export async function timeoutBounty(
   provider: ElectrumNetworkProvider,
   maintainerAddress: string,
   locktime: number,
+  beforeBroadcast?: (transaction: TransactionResult) => Promise<void>,
 ): Promise<TimeoutResult> {
   console.log("⏰ Processing timeout refund...");
   console.log(`   Maintainer: ${maintainerAddress}`);
@@ -822,7 +826,7 @@ export async function timeoutBounty(
   txBuilder.setLocktime(locktime);
 
   // Send transaction
-  const tx = await txBuilder.send();
+  const tx = await sendSettlementTransaction(txBuilder, provider, beforeBroadcast);
 
   console.log("✅ Timeout refund completed!");
   console.log(`   TX: ${tx.txid}`);

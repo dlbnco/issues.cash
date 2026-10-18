@@ -82,6 +82,35 @@ When a bounty is claimed, the payout message will show:
 - Commission amount and rate (if applicable)
 - Final amount received by contributor
 
+# Standalone web bounties
+
+Use `/post` to create a bounty without a repository. Configure `TELEGRAM_BOT_USERNAME` and `TELEGRAM_BOT_TOKEN`, and register your deployed hostname with BotFather's `/setdomain` command.
+
+- Creators can refund an active bounty even when claims are pending. A successful refund rejects those claims.
+- Awards are bound to the claim revision the creator reviewed. If it changes, refresh and review again.
+- Cancelling an unfunded web bounty archives it rather than deleting its escrow parameters. The funding cron refunds recoverable deposits, including partial or delayed payments. Deposits below the transaction fee plus dust threshold remain recorded for recovery.
+- Terms and claim revision histories are visible on the bounty page.
+
+## Deployment and recovery
+
+Run `yarn prisma migrate deploy` and `yarn prisma generate` before starting the updated app. Rate limits use PostgreSQL and are shared by all application workers.
+
+Schedule both cron endpoints with `Authorization: Bearer <CRON_SECRET>`:
+
+- `/api/cron/check-pending-bounties`: detects funding and refunds cancelled web escrows.
+- `/api/cron/process-expired-bounties`: reconciles settlements older than ten minutes, processes expiry refunds, and cleans up expired rate-limit buckets.
+
+Signed settlement transactions are saved before broadcasting. Recovery rebroadcasts the same transaction, rather than creating another spend. `CONFIRMED` means the application recorded a successful broadcast; it does not imply a mined block confirmation. Legacy `SETTLING` attempts without a saved transaction or transaction ID require manual chain inspection; their error is included in the cron response and settlement record.
+
+## Tests
+
+Run `yarn test`. PostgreSQL integration tests run when `TEST_DATABASE_URL` points to a **disposable, migrated test database**:
+
+```bash
+DATABASE_URL="$TEST_DATABASE_URL" yarn prisma migrate deploy
+yarn test --runInBand
+```
+
 # GitHub app
 
 The app can be installed in any repository here: https://github.com/apps/issues-cash
@@ -99,6 +128,8 @@ BCH_NETWORK=testnet3
 `yarn test:e2e` is separate from the mocked Jest suite. It broadcasts real transactions on **Chipnet only**: payouts with and without commission, multi-input payouts, refunds, expiry using the chain's median time, and rejection of an invalid oracle signature. It verifies the decoded transaction inputs/outputs, not just API responses. These are contract/service integration tests, not browser or Telegram-login tests.
 
 `yarn test:e2e:offline` separately checks the harness, recovery keys and transaction construction using CashScript's local BCH VM and `MockNetworkProvider`. It needs no wallet secret and does not replace the real-network suite.
+
+On the web-bounty branch, set `TEST_DATABASE_URL` to an **empty, disposable, migrated** PostgreSQL database whose name contains `test` or `e2e`. The suite refuses databases that already contain bounties before invoking the application cron/service functions. With this variable, `test:e2e` also covers web funding/award with commission, pending-claim refunds, partial cancellation, expiry, stale revisions, and recovery after a real broadcast reply is deliberately lost. The offline command also runs those application scenarios against the local BCH VM when `TEST_DATABASE_URL` is set. Neither command tests browser interactions or Telegram authentication.
 
 Use a **dedicated, compressed testnet WIF**, funded on Chipnet (for example via https://tbch.googol.cash/). Keep at least 0.002 tBCH available; 0.01 tBCH gives more headroom. Never reuse a mainnet wallet's private key, even re-encoded as a testnet WIF.
 

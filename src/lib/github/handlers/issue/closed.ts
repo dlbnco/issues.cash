@@ -53,6 +53,7 @@ export async function handleIssueClosed(
     case BountyStatus.CLAIMED:
     case BountyStatus.REFUNDED:
     case BountyStatus.PENDING_FUNDING:
+    case BountyStatus.SETTLING:
     case BountyStatus.EXPIRED:
       return {
         success: true,
@@ -83,7 +84,7 @@ export async function handleIssueClosed(
 
       const message = messages.bountyRefundedMessage({
         amount: result[1],
-        issueNumber: bounty.issueNumber,
+        issueNumber: bounty.issueNumber!,
         maintainerAddress: bounty.maintainerAddress,
         txId: result[0].txid,
         network,

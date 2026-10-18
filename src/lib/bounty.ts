@@ -58,7 +58,7 @@ export interface CreateBountyParams {
 
 export interface BountyInfo {
   id: string;
-  issueUrl: string;
+  issueUrl: string | null;
   issueHash: string;
   contractAddress: string;
   maintainerAddress: string;
@@ -203,6 +203,7 @@ export async function checkPendingBounties(): Promise<{
   // Get all pending bounties
   const pending = await prisma.bounty.findMany({
     where: { status: "PENDING_FUNDING" },
+    include: { webBounty: true },
   });
 
   let fundedCount = 0;
@@ -213,6 +214,15 @@ export async function checkPendingBounties(): Promise<{
         config[bounty.network],
         bounty.contractAddress,
       );
+
+      if (bounty.webBounty?.cancelledAt) {
+        if (balance.error) throw new Error(balance.error);
+        if (balance.confirmed > BigInt(0)) {
+          const { refundCancelledWebBounty } = await import("@/lib/web-settlement");
+          await refundCancelledWebBounty(bounty.id);
+        }
+        continue;
+      }
 
       // Total required = bounty amount + fee
       const totalRequired = bounty.amount + (bounty.feeAmount ?? BigInt(0));
@@ -225,8 +235,28 @@ export async function checkPendingBounties(): Promise<{
         console.log(`   Total required: ${totalRequired} sats`);
         console.log(`   Received: ${balance.confirmed} sats`);
 
+        if (bounty.platform === Platform.WEB) {
+          const activated = await prisma.$transaction(async (tx) => {
+            // Serialize activation with cancellation, then re-read cancellation
+            // after obtaining the row lock (the cron's initial snapshot may be stale).
+            await tx.bounty.update({
+              where: { id: bounty.id, status: "PENDING_FUNDING" },
+              data: { updatedAt: new Date() },
+            });
+            const web = await tx.webBounty.findUniqueOrThrow({ where: { bountyId: bounty.id } });
+            if (web.cancelledAt) return false;
+            await tx.bounty.update({
+              where: { id: bounty.id },
+              data: { status: "ACTIVE", fundedAt: new Date(), fundedAmount: balance.confirmed },
+            });
+            return true;
+          });
+          if (activated) fundedCount++;
+          continue;
+        }
+
         await prisma.bounty.update({
-          where: { id: bounty.id },
+          where: { id: bounty.id, status: "PENDING_FUNDING" },
           data: {
             status: "ACTIVE",
             fundedAt: new Date(),
@@ -234,12 +264,19 @@ export async function checkPendingBounties(): Promise<{
           },
         });
 
+        if (bounty.issueNumber == null || bounty.repoOwner == null || bounty.repoName == null) {
+          throw new Error("Repository metadata is required for external bounty updates");
+        }
+        const issueNumber = bounty.issueNumber;
+        const repoOwner = bounty.repoOwner;
+        const repoName = bounty.repoName;
+
         const message = bountyFundedMessage({
           amount: bounty.amount,
           fundedAmount: balance.confirmed,
           contractAddress: bounty.contractAddress,
           expiryDate: bounty.locktime,
-          issueNumber: bounty.issueNumber,
+          issueNumber,
         });
 
         let newCommentId: number | bigint | undefined;
@@ -257,7 +294,7 @@ export async function checkPendingBounties(): Promise<{
                 newCommentId = await postIssueNote(
                   gitlabProject.instanceUrl,
                   gitlabProject.projectId,
-                  bounty.issueNumber,
+                  issueNumber,
                   message,
                   gitlabProject.accessToken
                 );
@@ -265,7 +302,7 @@ export async function checkPendingBounties(): Promise<{
                 await updateIssueNote(
                   gitlabProject.instanceUrl,
                   gitlabProject.projectId,
-                  bounty.issueNumber,
+                  issueNumber,
                   bounty.commentId,
                   message,
                   gitlabProject.accessToken
@@ -278,20 +315,19 @@ export async function checkPendingBounties(): Promise<{
             }
             break;
           }
-          case Platform.GITHUB:
-          default: {
+          case Platform.GITHUB: {
             if (bounty.commentId == null) {
               newCommentId = await postIssueComment(
-                bounty.repoOwner,
-                bounty.repoName,
-                bounty.issueNumber,
+                repoOwner,
+                repoName,
+                issueNumber,
                 message,
                 bounty.installationId ?? undefined,
               );
             } else {
               await updateIssueComment(
-                bounty.repoOwner,
-                bounty.repoName,
+                repoOwner,
+                repoName,
                 bounty.commentId,
                 message,
                 bounty.installationId ?? undefined,
@@ -373,6 +409,11 @@ export interface CompleteBountyResult {
   commission: CommissionResult;
 }
 
+interface SettlementStatusOptions {
+  updateStatus?: boolean;
+  beforeBroadcast?: (transaction: TransactionResult) => Promise<void>;
+}
+
 /**
  * Complete a bounty - pay the contributor after PR is merged
  *
@@ -385,8 +426,9 @@ export async function completeBountyPayout(
   bounty: Bounty,
   contributorAddress: string,
   network: Network,
+  options: SettlementStatusOptions = {},
 ): Promise<CompleteBountyResult> {
-  if (bounty.status !== "ACTIVE") {
+  if (bounty.status !== "ACTIVE" && bounty.status !== "SETTLING") {
     throw new Error(`Cannot complete bounty with status: ${bounty.status}`);
   }
 
@@ -419,15 +461,15 @@ export async function completeBountyPayout(
     config.oracleKeys.privateKey,
     oracleFeePKH,
     commission.commissionAmount,
+    options.beforeBroadcast,
   );
 
-  // Update bounty status
-  await prisma.bounty.update({
-    where: { id: bounty.id },
-    data: {
-      status: "CLAIMED",
-    },
-  });
+  if (options.updateStatus !== false) {
+    await prisma.bounty.update({
+      where: { id: bounty.id },
+      data: { status: "CLAIMED" },
+    });
+  }
 
   console.log(
     `✅ Bounty ${bounty.id} completed, paid to ${contributorAddress}`,
@@ -456,8 +498,9 @@ export async function completeBountyPayout(
 export async function refundBountyToMaintainer(
   bounty: Bounty,
   network: Network,
+  options: SettlementStatusOptions = {},
 ): Promise<[TransactionResult, bigint]> {
-  if (bounty.status !== "ACTIVE") {
+  if (bounty.status !== "ACTIVE" && bounty.status !== "SETTLING") {
     throw new Error(`Cannot refund bounty with status: ${bounty.status}`);
   }
 
@@ -470,16 +513,18 @@ export async function refundBountyToMaintainer(
     bounty.maintainerAddress,
     bounty.issueHash,
     config.oracleKeys.privateKey,
+    options.beforeBroadcast,
   );
 
-  // Update bounty status and store transaction ID
-  await prisma.bounty.update({
-    where: { id: bounty.id },
-    data: {
-      status: "REFUNDED",
-      settlementTxId: transaction.txid,
-    },
-  });
+  if (options.updateStatus !== false) {
+    await prisma.bounty.update({
+      where: { id: bounty.id },
+      data: {
+        status: "REFUNDED",
+        settlementTxId: transaction.txid,
+      },
+    });
+  }
 
   console.log(`✅ Bounty ${bounty.id} refunded to ${bounty.maintainerAddress}`);
   console.log(`   TX: ${transaction.txid}`);
@@ -499,8 +544,9 @@ export async function refundBountyToMaintainer(
 export async function timeoutBountyRefund(
   bounty: Bounty,
   network: Network,
+  options: SettlementStatusOptions = {},
 ): Promise<[TransactionResult, bigint]> {
-  if (bounty.status !== "ACTIVE") {
+  if (bounty.status !== "ACTIVE" && bounty.status !== "SETTLING") {
     throw new Error(`Cannot timeout bounty with status: ${bounty.status}`);
   }
 
@@ -511,16 +557,15 @@ export async function timeoutBountyRefund(
     config.provider,
     bounty.maintainerAddress,
     bounty.locktime,
+    options.beforeBroadcast,
   );
 
-  // Update bounty status and store transaction ID
-  await prisma.bounty.update({
-    where: { id: bounty.id },
-    data: {
-      status: "EXPIRED",
-      settlementTxId: transaction.txid,
-    },
-  });
+  if (options.updateStatus !== false) {
+    await prisma.bounty.update({
+      where: { id: bounty.id },
+      data: { status: "EXPIRED", settlementTxId: transaction.txid },
+    });
+  }
 
   console.log(
     `✅ Bounty ${bounty.id} expired, refunded to ${bounty.maintainerAddress}`
@@ -560,6 +605,12 @@ export async function processExpiredBounties(): Promise<ProcessExpiredResult> {
 
   for (const bounty of expiredBounties) {
     try {
+      if (bounty.platform === Platform.WEB) {
+        const { timeoutWebBounty } = await import("@/lib/web-settlement");
+        await timeoutWebBounty(bounty.id);
+        refundedCount++;
+        continue;
+      }
       // Get the network from the bounty's stored network field
       const network = fromPrismaToElectrumNetwork(bounty.network);
 
@@ -606,6 +657,12 @@ export async function updateBountyComments(id: string): Promise<void> {
   });
   if (bounty == null) {
     throw new Error("Bounty not found");
+  }
+  if (bounty.platform === Platform.WEB) {
+    return;
+  }
+  if (bounty.issueNumber == null || bounty.repoOwner == null || bounty.repoName == null) {
+    throw new Error("Repository metadata is required for external bounty updates");
   }
   const { repoOwner: owner, repoName: repo } = bounty;
 

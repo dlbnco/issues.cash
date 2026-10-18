@@ -113,7 +113,7 @@ export async function handleIssueClosed(
     if (credentials.accessToken) {
       const message = messages.bountyRefundedMessage({
         amount,
-        issueNumber: bounty.issueNumber,
+        issueNumber: bounty.issueNumber!,
         maintainerAddress: bounty.maintainerAddress,
         txId: result.txid,
         network,

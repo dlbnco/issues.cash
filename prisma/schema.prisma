@@ -15,6 +15,7 @@ enum BCHNetwork {
 enum Platform {
   GITHUB
   GITLAB
+  WEB
 }
 
 model Bounty {
@@ -24,7 +25,7 @@ model Bounty {
   network           BCHNetwork
   platform          Platform     @default(GITHUB)
   fundedAt          DateTime?
-  issueUrl          String
+  issueUrl          String?
   issueHash         String
   issueTitle        String?
   contractAddress   String       @unique
@@ -36,17 +37,20 @@ model Bounty {
   fundedAmount      BigInt?
   status            BountyStatus @default(PENDING_FUNDING)
   feeAmount         BigInt?
-  issueNumber       Int
-  repoOwner         String
-  repoName          String
+  issueNumber       Int?
+  repoOwner         String?
+  repoName          String?
   attempts          Attempt[]
   commentId         BigInt?
   installationId    Int?
-  settlementTxId    String?      // Transaction ID for refunds (EXPIRED/REFUNDED status)
+  settlementTxId    String? // Transaction ID for refunds (EXPIRED/REFUNDED status)
 
   // GitLab-specific (null for GitHub bounties)
-  gitlabProject     GitLabProject? @relation(fields: [gitlabProjectId], references: [id])
-  gitlabProjectId   String?
+  gitlabProject      GitLabProject?      @relation(fields: [gitlabProjectId], references: [id])
+  gitlabProjectId    String?
+  webBounty          WebBounty?
+  claims             Claim[]
+  settlementAttempts SettlementAttempt[]
 
   @@index([status])
   @@index([issueUrl])
@@ -61,14 +65,14 @@ model Attempt {
   createdAt          DateTime      @default(now())
   updatedAt          DateTime      @updatedAt
   prNumber           Int
-  prUrl              String @unique
+  prUrl              String        @unique
   contributorLogin   String
   contributorAddress String
   status             AttemptStatus @default(PENDING)
   bountyId           String
   bounty             Bounty        @relation(fields: [bountyId], references: [id], onDelete: Cascade)
   settlementTxId     String?
-  commentId         BigInt?
+  commentId          BigInt?
 
   @@unique([bountyId, prNumber])
   @@index([bountyId])
@@ -78,9 +82,30 @@ model Attempt {
 enum BountyStatus {
   PENDING_FUNDING
   ACTIVE
+  SETTLING
   CLAIMED
   EXPIRED
   REFUNDED
+}
+
+enum ClaimStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  WITHDRAWN
+}
+
+enum SettlementIntent {
+  PAYOUT
+  REFUND
+  TIMEOUT
+}
+
+enum SettlementStatus {
+  PENDING
+  BROADCAST
+  CONFIRMED
+  FAILED
 }
 
 enum AttemptStatus {
@@ -91,22 +116,136 @@ enum AttemptStatus {
 
 // GitLab project credentials (Trust-On-First-Use)
 model GitLabProject {
-  id                String   @id @default(cuid())
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   // Project identification
-  projectId         Int      // GitLab project ID (numeric)
-  pathWithNamespace String   // e.g., "myorg/myrepo"
-  instanceUrl       String   @default("https://gitlab.com")
+  projectId         Int // GitLab project ID (numeric)
+  pathWithNamespace String // e.g., "myorg/myrepo"
+  instanceUrl       String @default("https://gitlab.com")
 
   // Credentials (stored on first valid webhook)
-  webhookSecret     String   // The secret part (hashed)
-  accessToken       String?  // The token part (encrypted, for bot comments)
+  webhookSecret String // The secret part (hashed)
+  accessToken   String? // The token part (encrypted, for bot comments)
 
   // Relations
-  bounties          Bounty[]
+  bounties Bounty[]
 
   @@unique([projectId, instanceUrl])
   @@index([pathWithNamespace])
+}
+
+model User {
+  id          String      @id @default(cuid())
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  telegramId  BigInt      @unique
+  username    String?
+  firstName   String
+  lastName    String?
+  photoUrl    String?
+  sessions    Session[]
+  webBounties WebBounty[]
+  claims      Claim[]
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  expiresAt DateTime
+  tokenHash String
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model WebBounty {
+  bountyId  String           @id
+  slug      String           @unique
+  title     String
+  body      Json
+  revision  Int              @default(1)
+  creatorId String
+  cancelledAt DateTime?
+  bounty    Bounty           @relation(fields: [bountyId], references: [id], onDelete: Cascade)
+  creator   User             @relation(fields: [creatorId], references: [id], onDelete: Restrict)
+  revisions BountyRevision[]
+
+  @@index([creatorId])
+}
+
+model BountyRevision {
+  id        String    @id @default(cuid())
+  createdAt DateTime  @default(now())
+  bountyId  String
+  revision  Int
+  title     String
+  body      Json
+  bounty    WebBounty @relation(fields: [bountyId], references: [bountyId], onDelete: Cascade)
+
+  @@unique([bountyId, revision])
+  @@index([bountyId, createdAt])
+}
+
+model Claim {
+  id                 String              @id @default(cuid())
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+  bountyId           String
+  claimantId         String
+  status             ClaimStatus         @default(PENDING)
+  currentRevision    Int                 @default(1)
+  settlementTxId     String?
+  bounty             Bounty              @relation(fields: [bountyId], references: [id], onDelete: Cascade)
+  claimant           User                @relation(fields: [claimantId], references: [id], onDelete: Cascade)
+  revisions          ClaimRevision[]
+  settlementAttempts SettlementAttempt[]
+
+  @@unique([bountyId, claimantId])
+  @@index([bountyId, status])
+  @@index([claimantId])
+}
+
+model ClaimRevision {
+  id            String   @id @default(cuid())
+  createdAt     DateTime @default(now())
+  claimId       String
+  revision      Int
+  payoutAddress String
+  body          String
+  workUrl       String?
+  claim         Claim    @relation(fields: [claimId], references: [id], onDelete: Cascade)
+
+  @@unique([claimId, revision])
+  @@index([claimId, createdAt])
+}
+
+model SettlementAttempt {
+  id             String           @id @default(cuid())
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+  idempotencyKey String           @unique
+  intent         SettlementIntent
+  status         SettlementStatus @default(PENDING)
+  txId           String?
+  rawTx          String?
+  error          String?
+  bountyId       String
+  claimId        String?
+  bounty         Bounty           @relation(fields: [bountyId], references: [id], onDelete: Cascade)
+  claim          Claim?           @relation(fields: [claimId], references: [id], onDelete: SetNull)
+
+  @@index([bountyId, status])
+  @@index([claimId])
+}
+
+model RateLimitBucket {
+  key       String   @id
+  count     Int
+  expiresAt DateTime
+
+  @@index([expiresAt])
 }
