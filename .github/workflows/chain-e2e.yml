@@ -1,0 +1,95 @@
+name: Chipnet transactions
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - contracts/**
+      - src/lib/contract.ts
+      - src/lib/settlement-transaction.ts
+      - src/lib/web-settlement.ts
+      - src/lib/web-bounty.ts
+      - src/lib/bounty.ts
+      - src/lib/commission.ts
+      - src/lib/constants.ts
+      - src/lib/network.ts
+      - src/app/api/web-bounties/**
+      - src/app/api/cron/**
+      - prisma/**
+      - e2e/**
+      - vitest.e2e.config.mts
+      - package.json
+      - yarn.lock
+      - .github/workflows/chain-e2e.yml
+
+permissions:
+  contents: read
+
+# All branches use the SAME environment wallet. Never cancel an active spend.
+concurrency:
+  group: chipnet-e2e-wallet
+  cancel-in-progress: false
+
+jobs:
+  chain-e2e:
+    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: chipnet-e2e
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: e2e
+          POSTGRES_PASSWORD: e2e
+          POSTGRES_DB: chain_e2e
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U e2e -d chain_e2e"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://e2e:e2e@localhost:5432/chain_e2e
+      TEST_DATABASE_URL: postgresql://e2e:e2e@localhost:5432/chain_e2e
+      NEXT_PUBLIC_BCH_NETWORK: testnet3
+      BCH_ELECTRUM_HOST_TESTNET3: chipnet.bch.ninja
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: corepack enable
+      - run: yarn install --immutable
+      - run: yarn prisma generate
+      - run: yarn prisma migrate deploy
+      - run: yarn test:e2e:offline
+      - name: Broadcast Chipnet test transactions
+        env:
+          E2E_RUN_CHIPNET: '1'
+          E2E_FUNDER_WIF: ${{ secrets.E2E_FUNDER_WIF }}
+        run: yarn test:e2e
+      - name: Publish public transaction manifest
+        if: always()
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import glob, json, os
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as summary:
+              summary.write('## Chipnet transactions\n')
+              for filename in glob.glob('e2e-artifacts/*/manifest.json'):
+                  data = json.load(open(filename))
+                  summary.write(f"\nRun `{data['runId']}`\n")
+                  for tx in data['transactions']:
+                      summary.write(f"- [{tx['label']}](https://chipnet.chaingraph.cash/tx/{tx['txid']})\n")
+                  for error in data.get('recoveryErrors', []):
+                      summary.write(f"- **Recovery required:** {error}\n")
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: chipnet-public-manifests
+          path: e2e-artifacts/*/manifest.json
+          if-no-files-found: ignore
+          retention-days: 30

@@ -17,6 +17,7 @@ import {
 import crypto from "crypto";
 import { secp256k1 } from "@noble/curves/secp256k1.js";
 import fs from "fs";
+import path from "path";
 import { UNLOCKING_TX_FEE_AMOUNT, PER_INPUT_FEE, DUST_LIMIT } from "./constants";
 
 export interface OracleKeys {
@@ -242,7 +243,8 @@ export function compileContract(
  * Create Electrum network provider
  */
 export function createProvider(network: Network): ElectrumNetworkProvider {
-  const provider = new ElectrumNetworkProvider(network);
+  const hostname = network === "testnet3" ? process.env.BCH_ELECTRUM_HOST_TESTNET3 : undefined;
+  const provider = new ElectrumNetworkProvider(network, hostname ? { hostname } : {});
   console.log(`🔌 Connected to Electrum (${network})`);
   return provider;
 }
@@ -392,7 +394,10 @@ export function createConfig(
     network,
     provider: createProvider(network),
     artifact: compileContract(contractPath),
-    oracleKeys: getOracleKeys(keyPath, network),
+    oracleKeys: getOracleKeys(
+      process.env.ORACLE_KEY_DIR ? path.join(process.env.ORACLE_KEY_DIR, path.basename(keyPath)) : keyPath,
+      network,
+    ),
   };
 }
 

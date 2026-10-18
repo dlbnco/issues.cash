@@ -9,6 +9,8 @@
     "lint": "eslint",
     "test": "jest",
     "test:watch": "jest --watch",
+    "test:e2e": "vitest run --config vitest.e2e.config.mts",
+    "test:e2e:offline": "E2E_OFFLINE=1 vitest run --config vitest.e2e.config.mts",
     "generate-keys": "node scripts/generate-oracle-keys.js",
     "generate-keys:mainnet": "node scripts/generate-oracle-keys.js --mainnet",
     "generate-keys:both": "node scripts/generate-oracle-keys.js --both"
@@ -47,6 +49,7 @@
     "prisma": "6.18.0",
     "tailwindcss": "^4",
     "ts-jest": "^29.4.6",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^3.2.4"
   }
 }
