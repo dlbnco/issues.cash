@@ -125,7 +125,7 @@ E2E_RECOVER_MANIFEST=./e2e-artifacts/<run-id>/manifest.json yarn test:e2e
 
 Create an environment named **`chipnet-e2e`** with secret **`E2E_FUNDER_WIF`**. Configure required reviewers for that environment before adding the secret: a same-repository PR executes its code with the spending key, so approve only trusted changes. Use a low-balance test-only wallet.
 
-The **Chipnet transactions** workflow runs on pull requests touching escrow code, migrations, tests or their configuration, and supports manual dispatch after the workflow exists on the default branch. There is no PR-label trigger. Fork PRs are skipped; `pull_request_target` is not used. Runs are serialized across branches, are not cancelled mid-spend, and have a 15-minute timeout. GitHub retains only one queued run for the shared wallet, so a newer queued run can replace an older one. Do not run locally at the same time with the same wallet.
+The **Chipnet transactions** workflow runs on pull requests touching escrow code, migrations, tests or their configuration, and supports manual dispatch after the workflow exists on the default branch. There is no PR-label trigger. Fork PRs are skipped; `pull_request_target` is not used. Runs are serialized across branches, are not cancelled mid-spend, and have a 30-minute timeout. GitHub retains only one queued run for the shared wallet, so a newer queued run can replace an older one. Do not run locally at the same time with the same wallet.
 
 The workflow provisions disposable PostgreSQL, applies migrations (for application-level scenarios added by dependent PRs), and uploads only public transaction/recovery manifests. Transaction links and recovery failures appear in its summary. No faucet calls or automatic top-ups are made.
 
