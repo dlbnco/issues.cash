@@ -2,6 +2,7 @@
   "name": "issues.cash",
   "version": "0.1.0",
   "private": true,
+  "packageManager": "yarn@4.5.3",
   "scripts": {
     "dev": "next dev --webpack",
     "build": "next build --webpack",
@@ -10,7 +11,7 @@
     "test": "jest",
     "test:watch": "jest --watch",
     "test:e2e": "vitest run --config vitest.e2e.config.mts",
-    "test:e2e:offline": "E2E_OFFLINE=1 vitest run --config vitest.e2e.config.mts",
+    "test:e2e:offline": "E2E_OFFLINE=1 vitest run --config vitest.e2e.config.mts --silent",
     "generate-keys": "node scripts/generate-oracle-keys.js",
     "generate-keys:mainnet": "node scripts/generate-oracle-keys.js --mainnet",
     "generate-keys:both": "node scripts/generate-oracle-keys.js --both"
