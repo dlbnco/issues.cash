@@ -61,15 +61,15 @@ jobs:
         with:
           node-version: 22
       - run: corepack enable
-      - run: yarn install --immutable
-      - run: yarn prisma generate
-      - run: yarn prisma migrate deploy
-      - run: yarn test:e2e:offline
+      - run: corepack yarn install --immutable
+      - run: corepack yarn prisma generate
+      - run: corepack yarn prisma migrate deploy
+      - run: corepack yarn test:e2e:offline
       - name: Broadcast Chipnet test transactions
         env:
           E2E_RUN_CHIPNET: '1'
           E2E_FUNDER_WIF: ${{ secrets.E2E_FUNDER_WIF }}
-        run: yarn test:e2e
+        run: corepack yarn test:e2e
       - name: Publish public transaction manifest
         if: always()
         shell: bash
