@@ -129,6 +129,8 @@ The **Chipnet transactions** workflow runs on pull requests touching escrow code
 
 The workflow provisions disposable PostgreSQL, applies migrations (for application-level scenarios added by dependent PRs), and uploads only public transaction/recovery manifests. Transaction links and recovery failures appear in its summary. No faucet calls or automatic top-ups are made.
 
+Escrow-related pull requests require the **Chipnet E2E gate** before merging. Fork pull requests are verified manually by a maintainer because they cannot access the protected wallet; see [CONTRIBUTING.md](CONTRIBUTING.md).
+
 # GitLab integration
 
 1. Create an access token for the bot in `Settings → Access Tokens`:
