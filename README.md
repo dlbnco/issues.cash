@@ -129,6 +129,8 @@ BCH_NETWORK=testnet3
 
 `yarn test:e2e:offline` separately checks the harness, recovery keys and transaction construction using CashScript's local BCH VM and `MockNetworkProvider`. It needs no wallet secret and does not replace the real-network suite.
 
+On the web-bounty branch, set `TEST_DATABASE_URL` to an **empty, disposable, migrated** PostgreSQL database whose name contains `test` or `e2e`. The suite refuses databases that already contain bounties before invoking the application cron/service functions. With this variable, `test:e2e` also covers web funding/award with commission, pending-claim refunds, partial cancellation, expiry, stale revisions, and recovery after a real broadcast reply is deliberately lost. The offline command also runs those application scenarios against the local BCH VM when `TEST_DATABASE_URL` is set. Neither command tests browser interactions or Telegram authentication.
+
 Use a **dedicated, compressed testnet WIF**, funded on Chipnet (for example via https://tbch.googol.cash/). Keep at least 0.002 tBCH available; 0.01 tBCH gives more headroom. Never reuse a mainnet wallet's private key, even re-encoded as a testnet WIF.
 
 ```bash
