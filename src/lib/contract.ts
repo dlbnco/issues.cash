@@ -17,6 +17,7 @@ import {
 import crypto from "crypto";
 import { secp256k1 } from "@noble/curves/secp256k1.js";
 import fs from "fs";
+import { RecoveringElectrumProvider } from "./electrum-provider";
 import path from "path";
 import { UNLOCKING_TX_FEE_AMOUNT, COMPLETION_PER_INPUT_FEE, PER_INPUT_FEE, DUST_LIMIT } from "./constants";
 
@@ -244,7 +245,9 @@ export function compileContract(
  */
 export function createProvider(network: Network): ElectrumNetworkProvider {
   const hostname = network === "testnet3" ? process.env.BCH_ELECTRUM_HOST_TESTNET3 : undefined;
-  const provider = new ElectrumNetworkProvider(network, hostname ? { hostname } : {});
+  const provider = hostname
+    ? new RecoveringElectrumProvider(network, hostname)
+    : new ElectrumNetworkProvider(network);
   console.log(`🔌 Connected to Electrum (${network})`);
   return provider;
 }

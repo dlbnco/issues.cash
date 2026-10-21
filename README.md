@@ -112,7 +112,11 @@ yarn test:e2e
 
 Tests use `chipnet.bch.ninja` explicitly. The app's existing `testnet3` address/network setting is routed to Chipnet with `BCH_ELECTRUM_HOST_TESTNET3`; this does not make testnet3 and Chipnet the same chain. `ORACLE_KEY_DIR` redirects oracle files into an ignored per-run directory. Normal app defaults are unchanged.
 
+For the configured testnet endpoint, requests share a serialized connection that closes after two idle seconds. Transport failures force-close the client and retry with a new one, up to three attempts with a ten-second deadline per attempt. Broadcast retries send the exact same signed bytes; script and fee rejections are not retried. Default mainnet and testnet providers are unchanged.
+
 After each test, recovery attempts to refund remaining escrows and sweep the test wallets (including commissions) back to the funder. Runs consume real testnet fees, generally several thousand satoshis per case. Balances below fee plus dust cannot be swept. Network failures or killed processes can interrupt cleanup; recovery is best-effort, not a guarantee.
+
+An uncertain broadcast remains in the public manifest even if a short transaction lookup fails. Only a definite script, fee, or serialization rejection removes it. The live suite stops after its first unexpected failure, still attempting cleanup on a fresh connection. If that connection also exhausts its retries, cleanup records the interruption and stops checking further addresses; it does not report every unchecked wallet as a failed recovery. Download the public manifest artifact and use the recovery command below once connectivity is restored. A recorded transaction ID alone is not proof that it was broadcast successfully.
 
 Each run writes a public `e2e-artifacts/<run-id>/manifest.json` **before funding**. The per-run test keys are derived from the funder key and run ID with a domain-separated HMAC, so this public manifest plus the original funder WIF is sufficient to recover without publishing private keys. Keep the funder key private and retain manifests for failed runs. Never upload the `keys/` subdirectory.
 
