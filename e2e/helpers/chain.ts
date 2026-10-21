@@ -6,6 +6,7 @@ import { cashAddressToLockingBytecode, decodePrivateKeyWif, decodeTransaction, h
 import { Contract, SignatureTemplate, TransactionBuilder, type Utxo } from "cashscript";
 import { createBounty, createConfig, pubkeyToAddress, refundBounty, reconstructContract, type BountyContractInfo, type ContractParams } from "@/lib/contract";
 import { assertChainTestEnvironment, CHIPNET_HOST } from "./safety";
+import { ElectrumTransportError, isElectrumTransportError, RecoveringElectrumProvider } from "@/lib/electrum-provider";
 
 export const REWARD = BigInt(100_000);
 export const ESCROW_FUNDING = REWARD + BigInt(1_000);
@@ -34,7 +35,11 @@ export async function waitFor<T>(description: string, read: () => Promise<T | un
     try {
       const result = await read();
       if (result !== undefined) return result;
-    } catch { /* Electrum can lag behind a successful broadcast. */ }
+    } catch (error) {
+      // A completed set of transport retries is not normal mempool indexing
+      // lag. Propagate it so the live suite stops instead of opening more escrows.
+      if (isElectrumTransportError(error)) throw error;
+    }
     await delay(1500);
   }
   throw new Error(`Timed out waiting for ${description}. Check the transaction manifest before retrying.`);
@@ -130,14 +135,21 @@ export class ChainHarness {
     try {
       await this.config.provider.sendRawTransaction(hex);
     } catch (error) {
-      // A lost reply can mean the node accepted the transaction, but a node
-      // rejection must not remain in the recovery manifest indefinitely.
+      const message = error instanceof Error ? error.message : String(error);
+      // Only an explicit script/fee/serialization rejection is proof that the
+      // node rejected the transaction. A failed lookup after a TLS error is not.
+      if (/mandatory-script-verify|non-mandatory-script-verify|min relay fee not met|tx-size-small|dust|non-final|TX decode failed|bad-txns-(?:vout|vin|oversize|txout|in-belowout)/i.test(message)) {
+        this.forgetTransaction(txid);
+        throw new Error(`Chipnet transaction broadcast rejected: ${message}`);
+      }
       try {
         await this.waitTransaction(txid, 5_000);
-      } catch {
-        this.forgetTransaction(txid);
-        const message = error instanceof Error ? error.message : String(error);
-        throw new Error(`Chipnet transaction broadcast failed: ${message}`);
+      } catch (lookupError) {
+        const uncertain = `Chipnet broadcast outcome unknown for ${txid}; signed transaction retained in ${this.manifestPath}.`;
+        if (isElectrumTransportError(error) || isElectrumTransportError(lookupError)) {
+          throw new ElectrumTransportError(uncertain);
+        }
+        throw new Error(uncertain);
       }
     }
     await this.waitTransaction(txid);
@@ -252,6 +264,18 @@ export class ChainHarness {
 
   async cleanup(recoverSavedTransactions = false) {
     const errors: string[] = [];
+    // Do not reuse a socket that just failed during the test. This is a no-op
+    // for the offline VM and resets only the connection, never transaction data.
+    await this.close();
+    const recoveryFailed = (context: string, error: unknown) => {
+      errors.push(context);
+      if (isElectrumTransportError(error)) {
+        errors.push("Electrum unavailable; remaining recovery checks were skipped, not verified as failed.");
+        this.manifest.recoveryErrors = errors;
+        this.save();
+        throw new ElectrumTransportError(`Cleanup stopped: ${errors.join("\n")}\nRecover using ${this.manifestPath} with the original funder WIF.`);
+      }
+    };
     if (recoverSavedTransactions) {
       // A process may have stopped between saving and broadcasting a transaction,
       // or lost the broadcast reply. This is intentionally recovery-only: checking
@@ -264,7 +288,7 @@ export class ChainHarness {
             catch { /* It may already be in the node's mempool or chain. */ }
             await this.waitTransaction(tx.txid, 5_000);
           }
-        } catch { errors.push(`Saved transaction recovery failed: ${tx.txid}`); }
+        } catch (error) { recoveryFailed(`Saved transaction recovery failed: ${tx.txid}`, error); }
       }
     }
     for (const params of this.manifest.escrows) {
@@ -280,7 +304,7 @@ export class ChainHarness {
         const refund = await refundBounty(contract, this.config.provider, maintainer.address, params.issueHash, this.config.oracleKeys.privateKey);
         this.record("cleanup escrow refund", refund.transaction);
         await this.waitCoins(maintainer.address, refund.refundedAmount);
-      } catch { errors.push(`Escrow recovery failed: ${params.address}`); }
+      } catch (error) { recoveryFailed(`Escrow recovery failed: ${params.address}`, error); }
     }
     // Include the oracle's commission output in the sweep.
     const oracleSigner = new SignatureTemplate(this.derive("oracle"));
@@ -288,10 +312,14 @@ export class ChainHarness {
     wallets.push({ label: "oracle", signer: oracleSigner, address: this.config.oracleKeys.address });
     for (const wallet of wallets) {
       try { await this.send(wallet, this.funder.address); }
-      catch { errors.push(`Wallet recovery failed: ${wallet.address}`); }
+      catch (error) { recoveryFailed(`Wallet recovery failed: ${wallet.address}`, error); }
     }
     this.manifest.recoveryErrors = errors;
     this.save();
     if (errors.length) throw new Error(`${errors.join("\n")}\nUse E2E_RECOVER_MANIFEST=${this.manifestPath} with the original funder WIF.`);
+  }
+
+  async close() {
+    if (this.config.provider instanceof RecoveringElectrumProvider) await this.config.provider.disconnect();
   }
 }

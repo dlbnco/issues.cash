@@ -1,4 +1,4 @@
-import { afterEach, beforeAll, describe, expect, test } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, test } from "vitest";
 import { TransactionBuilder } from "cashscript";
 import { CashAddressType, encodeCashAddress } from "@bitauth/libauth";
 import { addressToPKH, checkBountyFunding, completeBounty, getOracleFeePKH, refundBounty, signOracleMessage, timeoutBounty, type BountyContractInfo } from "@/lib/contract";
@@ -75,6 +75,7 @@ describe("real Chipnet escrow transactions", () => {
     await chain.preflight();
   });
   afterEach(async () => { await chain?.cleanup(); });
+  afterAll(async () => { await chain?.close(); });
 
   test.each([BigInt(0), BigInt(2_000)])("funds and pays an escrow with %s sats commission", async (commission) => {
     const h = chain!;

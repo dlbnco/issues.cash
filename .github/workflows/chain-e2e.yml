@@ -30,7 +30,7 @@ jobs:
               per_page: 100,
             });
             const relevant = files.some(({ filename }) =>
-              /^(contracts\/|e2e\/|prisma\/|src\/lib\/(contract|settlement-transaction|web-settlement|web-bounty|bounty|commission|constants|network)\.ts$|src\/app\/api\/(web-bounties|cron)\/|vitest\.e2e\.config\.mts$|package\.json$|yarn\.lock$|\.github\/workflows\/chain-e2e\.yml$)/.test(filename),
+              /^(contracts\/|e2e\/|prisma\/|src\/lib\/(contract|electrum-provider|settlement-transaction|web-settlement|web-bounty|bounty|commission|constants|network)\.ts$|src\/app\/api\/(web-bounties|cron)\/|vitest\.e2e\.config\.mts$|package\.json$|yarn\.lock$|\.github\/workflows\/chain-e2e\.yml$)/.test(filename),
             );
             core.setOutput('relevant', String(relevant));
 

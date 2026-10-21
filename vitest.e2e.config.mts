@@ -15,5 +15,8 @@ export default defineConfig({
     testTimeout: 90_000,
     hookTimeout: 180_000,
     retry: 0,
+    // Stop before funding more escrows after an unexpected live-test failure.
+    // afterEach still runs recovery for the failing case.
+    bail: process.env.E2E_OFFLINE === "1" ? 0 : 1,
   },
 });
